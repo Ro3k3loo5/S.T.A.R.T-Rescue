@@ -1,28 +1,164 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Start Vitals</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#3498db">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="container">
-    <!-- Header and tabs -->
-    <!-- Tab content sections -->
-  </div>
-  
-  <!-- Modals -->
-  
-  <!-- Scripts loaded in correct order -->
-  <script src="patient.js"></script>
-  <script src="vitals.js"></script>
-  <script src="gcs.js"></script>
-  <script src="cpr.js"></script>
-  <script src="notes.js"></script>
-  <script src="results.js"></script>
-  <script src="app.js"></script>
-</body>
-</html>
+<!-- Add this button to your tab-nav section -->
+<button class="tab-button cpr-active" onclick="openTab(event,'cpr')">CPR</button>
+
+<!-- Add this CPR tab content after your GCS tab -->
+<div id="cpr" class="tab-content">
+    <div class="tab-patient-header">
+        <span class="patient-indicator">CURRENT PATIENT</span>
+        <span id="cpr-current">New Patient</span>
+    </div>
+    
+    <h2>CPR Management</h2>
+    <div id="cpr-alert" class="alert-banner alert-none"></div>
+
+    <!-- CPR Sub-tabs -->
+    <div class="cpr-sub-tabs">
+        <button class="cpr-sub-tab active" onclick="openCprTab(event, 'metronome')">Metronome</button>
+        <button class="cpr-sub-tab" onclick="openCprTab(event, 'events')">Events</button>
+        <button class="cpr-sub-tab" onclick="openCprTab(event, 'timeline')">Timeline</button>
+    </div>
+
+    <!-- Metronome Tab -->
+    <div id="cpr-metronome" class="cpr-sub-content active">
+        <div class="metronome-container">
+            <div id="metronome-display" class="metronome-display">
+                <div id="metronome-beat" class="metronome-beat"></div>
+                <div id="metronome-rate" class="metronome-rate">100</div>
+                <div>bpm</div>
+            </div>
+
+            <div class="metronome-controls">
+                <div class="metronome-buttons">
+                    <button id="metronome-start" class="btn btn-primary" onclick="toggleMetronome()">Start</button>
+                    <button id="metronome-reset" class="btn btn-secondary" onclick="resetMetronome()">Reset</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="metronome-slider">Compression Rate: <span id="rate-value">100</span> bpm</label>
+                    <input id="metronome-slider" class="metronome-slider" type="range" min="80" max="120" value="100" step="1" oninput="updateMetronomeRate(this.value)">
+                </div>
+
+                <div class="form-group">
+                    <label class="toggle-row">
+                        <input type="checkbox" id="audio-enabled" checked>
+                        Enable Audio Beep
+                    </label>
+                </div>
+
+                <div id="compression-counter" class="compression-counter">0</div>
+                <div id="compression-cycle" class="compression-cycle">Cycle: 0/0</div>
+                <div id="cpr-timer" class="cpr-timer">00:00</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events Tab -->
+    <div id="cpr-events" class="cpr-sub-content">
+        <div class="form-group">
+            <label>Rhythm</label>
+            <select id="rhythm-select">
+                <option value="">Select rhythm</option>
+                <option value="unknown">Unknown</option>
+                <option value="vf">VF (Ventricular Fibrillation)</option>
+                <option value="vt">VT (Ventricular Tachycardia)</option>
+                <option value="asystole">Asystole</option>
+                <option value="pea">PEA (Pulseless Electrical Activity)</option>
+            </select>
+            <button class="btn btn-primary" onclick="logRhythmChange()">Log Rhythm</button>
+        </div>
+
+        <div class="form-group">
+            <label>Shock</label>
+            <div class="input-group">
+                <input id="shock-energy" type="number" placeholder="Energy (J)" min="1" max="360">
+                <button class="btn btn-danger" onclick="logShock()">Deliver Shock</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Medication</label>
+            <select id="medication-select" onchange="handleMedicationChange()">
+                <option value="">Select medication</option>
+                <option value="amiodarone">Amiodarone</option>
+                <option value="lidocaine">Lidocaine</option>
+                <option value="calcium">Calcium Chloride</option>
+                <option value="sodium-bicarb">Sodium Bicarbonate</option>
+                <option value="epinephrine">Epinephrine</option>
+                <option value="other">Other</option>
+            </select>
+            <div id="other-med-group" class="form-group" style="display:none;">
+                <input id="other-medication" type="text" placeholder="Specify medication">
+            </div>
+            <div id="epi-dose-group" class="form-group" style="display:none;">
+                <label>Epinephrine Dose</label>
+                <div class="input-group">
+                    <input id="epi-dose" type="number" value="1" min="1" max="10">
+                    <span class="input-group-addon">mg</span>
+                </div>
+                <label>Interval</label>
+                <select id="epi-interval">
+                    <option value="3">Every 3 minutes</option>
+                    <option value="4">Every 4 minutes</option>
+                    <option value="5">Every 5 minutes</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="logMedication()">Log Medication</button>
+        </div>
+
+        <div class="form-group">
+            <label>Intervention</label>
+            <select id="intervention-select" onchange="handleInterventionChange()">
+                <option value="">Select intervention</option>
+                <option value="intubation">Intubation</option>
+                <option value="needle-decomp">Needle Decompression</option>
+                <option value="chest-tube">Chest Tube</option>
+                <option value="central-line">Central Line</option>
+                <option value="io">IO Access</option>
+                <option value="iv">IV Access</option>
+                <option value="other-int">Other</option>
+            </select>
+            <div id="other-int-group" class="form-group" style="display:none;">
+                <input id="other-intervention" type="text" placeholder="Specify intervention">
+            </div>
+            <div id="int-notes-group" class="form-group" style="display:none;">
+                <label>Intervention Notes</label>
+                <textarea id="intervention-notes" placeholder="Add details about the intervention..."></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="logIntervention()">Log Intervention</button>
+        </div>
+
+        <div>
+            <label class="small">Recent Events</label>
+            <div id="cpr-events-log" class="log-list" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <!-- Timeline Tab -->
+    <div id="cpr-timeline" class="cpr-sub-content">
+        <div>
+            <label class="small">CPR Timeline</label>
+            <div id="cpr-timeline-log" class="log-list" aria-live="polite"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Add this modal after your results modal -->
+<!-- Pulse Check Modal -->
+<div id="pulse-check-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title">Pulse Check</div>
+            <span class="modal-close" onclick="closePulseCheckModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p>Two minutes of CPR completed. Check for pulse.</p>
+            <div class="form-group">
+                <label>Pulse Status</label>
+                <div class="toggle-row">
+                    <button class="btn btn-primary" onclick="pulseDetected()">Pulse Detected</button>
+                    <button class="btn btn-danger" onclick="noPulseDetected()">No Pulse</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
