@@ -1,421 +1,74 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Start Vitals</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#3498db">
-<link rel="stylesheet" href="styles.css">
+const CACHE_NAME = 'start-rescue-cache-v2'; // Increased version to force update
+const urlsToCache = [
+    './',
+    './index.html',
+    './styles.css',
+    './app.js',
+    './patient.js',
+    './vitals.js',
+    './gcs.js',
+    './notes.js',
+    './cpr.js',
+    './results.js',
+    './manifest.json',
+    // External dependencies
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+    // Add any image files (like icon-512.png) here
+    './icon-512.png' 
+];
 
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').then(registration => {
-        window.swRegistration = registration;
-        // Interval for checking for updates
-        setInterval(() => {
-          registration.update();
-        }, 60 * 60 * 1000);
-      }).catch(()=>{/*sw failed*/});
-    });
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('fetch', event => {
+  // Use a cache-first strategy
+  event.respondWith(
+    caches.match(event.request)
+      .then(response => {
+        // Cache hit - return response
+        if (response) {
+          return response;
+        }
+        // No cache hit - fetch from network
+        return fetch(event.request).catch(error => {
+          // Fallback response for specific URLs if network fails
+          if (event.request.url.includes('chart.umd.min.js')) {
+            // Can't return a chart here, so just let it fail or return a simple error
+            console.error("Chart.js failed to load from network and cache.");
+          }
+          throw error;
+        });
+      })
+  );
+});
+
+self.addEventListener('activate', event => {
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          // Delete old caches
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim()) // Claim clients immediately after activation
+  );
+});
+
+// Listener to force the service worker to immediately activate upon receiving an update message
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
-</script>
-</head>
-<body>
-<div class="container">
-  
-  <div class="header">
-    <div class="app-title">Start Vitals</div>
-    <div class="controls">
-      <button class="btn btn-results" onclick="showResults()">Results</button>
-      <div class="menu-container">
-        <button class="menu-button" onclick="toggleMenu()">⋮</button>
-        <div id="menu-dropdown" class="menu-dropdown">
-          <a href="#" onclick="checkForUpdates(); toggleMenu(); return false;">Check for Updates</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-nav" role="tablist">
-    <button class="tab-button active" onclick="openTab(event,'patient-info')">Patient Info</button>
-    <button class="tab-button" onclick="openTab(event,'vitals')">Vitals</button>
-    <button class="tab-button" onclick="openTab(event,'gcs')">GCS</button>
-    <button class="tab-button" onclick="openTab(event,'cpr')">CPR</button>
-    <button class="tab-button" onclick="openTab(event,'notes')">Notes</button>
-  </div>
-
-  <div id="patient-info" class="tab-content active">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="patient-info-current">New Patient</span>
-    </div>
-    
-    <h2>Patient Information</h2>
-    
-    <div class="patient-selector">
-      <div class="form-group">
-        <label>Current Patient</label>
-        <div id="current-patient-display" class="current-patient">New Patient</div>
-        <div id="patient-list" class="patient-list"></div>
-        <button id="add-patient-btn" class="btn btn-primary small-btn" onclick="addPatient()" style="margin-top: 8px;">+ Add Patient</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="patient-name">Name</label>
-      <input id="patient-name" placeholder="e.g., John Doe" onchange="patientNameChanged()">
-    </div>
-    <div class="form-group">
-      <label for="responder-id">Responder ID</label>
-      <input id="responder-id" placeholder="e.g., ST186" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="incident-type">Incident Type</label>
-      <select id="incident-type" onchange="patientInfoChanged()">
-        <option value="">Select incident type</option>
-        <option value="MVA - Motor Vehicle Accident">MVA - Motor Vehicle Accident</option>
-        <option value="Fall">Fall</option>
-        <option value="Cardiac Arrest">Cardiac Arrest</option>
-        <option value="Chest Pain">Chest Pain</option>
-        <option value="Stroke / TIA">Stroke / TIA</option>
-        <option value="Breathing Difficulty">Breathing Difficulty</option>
-        <option value="Diabetic Emergency">Diabetic Emergency</option>
-        <option value="Seizure">Seizure</option>
-        <option value="Allergic Reaction">Allergic Reaction</option>
-        <option value="Trauma">Trauma</option>
-        <option value="Burns">Burns</option>
-        <option value="Overdose / Poisoning">Overdose / Poisoning</option>
-        <option value="Psychiatric Emergency">Psychiatric Emergency</option>
-        <option value="Obstetric Emergency">Obstetric Emergency</option>
-        <option value="Other">Other</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="patient-age">Age</label>
-      <input id="patient-age" type="number" placeholder="e.g., 35" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="allergies">Allergies</label>
-      <input id="allergies" placeholder="e.g., Penicillin, Peanuts" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="medication">Medication</label>
-      <input id="medication" placeholder="e.g., Metformin, Lisinopril" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="history">Past History</label>
-      <input id="history" placeholder="e.g., Diabetes, Hypertension" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="last-intake">Last Intake (Food/Drink)</label>
-      <input id="last-intake" placeholder="e.g., Water at 10:00 AM" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="signs-symptoms">Signs & Symptoms</label>
-      <textarea id="signs-symptoms" placeholder="What are the patient's chief complaints?"></textarea>
-    </div>
-    <div class="form-group">
-      <label for="patient-priority">Patient Priority</label>
-      <select id="patient-priority" onchange="patientPriorityChanged()">
-        <option value="">Select priority</option>
-        <option value="P1">P1 - Immediate (Critical/Urgent)</option>
-        <option value="P2">P2 - Urgent (Serious)</option>
-        <option value="P3">P3 - Delayed (Walking Wounded)</option>
-        <option value="P4">P4 - Deceased</option>
-      </select>
-    </div>
-  </div>
-
-  <div id="vitals" class="tab-content">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="vitals-current">New Patient</span>
-    </div>
-    
-    <h2>Vitals</h2>
-    <div id="vitals-alert" class="alert-banner alert-none"></div>
-
-    <div class="form-group">
-      <label>Blood Pressure (mmHg)<span class="info-icon" onclick="showVitalInfo('bp')">?</span></label>
-      <div class="input-group">
-        <input id="bp-sys" type="number" placeholder="Systolic" oninput="updateVitalIndicator(this, 'bp-sys')">
-        <span>/</span>
-        <input id="bp-dia" type="number" placeholder="Diastolic" oninput="updateVitalIndicator(this, 'bp-dia')">
-        <span class="input-group-addon">mmHg</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="pulse">Pulse<span class="info-icon" onclick="showVitalInfo('pulse')">?</span></label>
-      <div class="input-group">
-        <input id="pulse" type="number" placeholder="e.g., 80" oninput="updateVitalIndicator(this, 'pulse')">
-        <span class="input-group-addon">bpm</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="spo2">SPO₂<span class="info-icon" onclick="showVitalInfo('spo2')">?</span></label>
-      <div class="input-group">
-        <input id="spo2" type="number" placeholder="e.g., 98" oninput="updateVitalIndicator(this, 'spo2')">
-        <span class="input-group-addon">%</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="rrate">Respiratory Rate<span class="info-icon" onclick="showVitalInfo('rrate')">?</span></label>
-      <div class="input-group">
-        <input id="rrate" type="number" placeholder="e.g., 16" oninput="updateVitalIndicator(this, 'rrate')">
-        <span class="input-group-addon">/min</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>O₂ Delivery<span class="info-icon" onclick="showVitalInfo('o2')">?</span></label>
-      <select id="o2-delivery">
-        <option value="">None</option>
-        <option value="nasal">Nasal Cannula</option>
-        <option value="mask">Face Mask</option>
-        <option value="non-rebreather">Non-rebreather Mask</option>
-        <option value="bag-valve">Bag-Valve Mask</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="o2-flow">O₂ Flow Rate<span class="info-icon" onclick="showVitalInfo('o2-flow')">?</span></label>
-      <div class="input-group">
-        <input id="o2-flow" type="number" placeholder="e.g., 2" step="0.5">
-        <span class="input-group-addon">L/min</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="hgt">Blood Glucose (HGT)<span class="info-icon" onclick="showVitalInfo('hgt')">?</span></label>
-      <div class="input-group">
-        <input id="hgt" type="number" step="0.1" placeholder="e.g., 5.5" oninput="updateVitalIndicator(this, 'hgt')">
-        <span class="input-group-addon">mmol/L</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="temp">Temperature<span class="info-icon" onclick="showVitalInfo('temp')">?</span></label>
-      <div class="input-group">
-        <input id="temp" type="number" step="0.1" placeholder="e.g., 36.8" oninput="updateVitalIndicator(this, 'temp')">
-        <span class="input-group-addon">°C</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="cap-refill">Capillary Refill<span class="info-icon" onclick="showVitalInfo('cap-refill')">?</span></label>
-      <div class="input-group">
-        <input id="cap-refill" type="number" placeholder="e.g., 2" oninput="updateVitalIndicator(this, 'cap-refill')">
-        <span class="input-group-addon">s</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Pupils (Left / Right)<span class="info-icon" onclick="showVitalInfo('pupils')">?</span></label>
-      <div class="pupils-input-group">
-        <input id="pupil-left" type="number" placeholder="L mm">
-        <input id="pupil-right" type="number" placeholder="R mm">
-        <span class="input-group-addon">mm</span>
-      </div>
-      <div class="pupils-checkbox">
-        <input type="checkbox" id="pupils-reactive" onchange="patientInfoChanged()">
-        <label for="pupils-reactive">Pupils reactive to light</label>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="pain">Pain Score<span class="info-icon" onclick="showVitalInfo('pain')">?</span></label>
-      <div class="input-group">
-        <input id="pain" type="number" min="0" max="10" placeholder="e.g., 5" oninput="updateVitalIndicator(this, 'pain')">
-        <span class="input-group-addon">/ 10</span>
-      </div>
-    </div>
-
-    <button class="btn btn-primary" onclick="submitVitals()">Log Vitals</button>
-    <div class="log-section">
-        <h3>Vitals Log</h3>
-        <div id="vitals-log" class="log-list"></div>
-        <h3>Vitals Chart</h3>
-        <div id="vitals-chart-container"></div>
-    </div>
-  </div>
-
-  <div id="gcs" class="tab-content">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="gcs-current">New Patient</span>
-    </div>
-    <h2>Glasgow Coma Scale (GCS)</h2>
-    <p>GCS content goes here. You need to add inputs for Eye, Verbal, and Motor responses, and a button to submitGCS().</p>
-  </div>
-
-
-  <div id="cpr" class="tab-content">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="cpr-current">New Patient</span>
-    </div>
-
-    <h2>CPR Management</h2>
-    <div id="cpr-alert" class="alert-banner alert-none"></div>
-
-    <div class="cpr-sub-tabs">
-      <button class="cpr-sub-tab active" onclick="openCprTab(event, 'cpr-metronome')">Metronome</button>
-      <button class="cpr-sub-tab" onclick="openCprTab(event, 'cpr-events')">Events</button>
-      <button class="cpr-sub-tab" onclick="openCprTab(event, 'cpr-timeline')">Timeline</button>
-    </div>
-
-    <div id="cpr-metronome" class="cpr-sub-content active">
-      <div class="metronome-container">
-        <div id="metronome-display" class="metronome-display">
-          <div id="metronome-beat" class="metronome-beat"></div>
-          <div id="metronome-rate" class="metronome-rate">100</div>
-          <div>bpm</div>
-        </div>
-
-        <div class="metronome-controls">
-          <div class="metronome-buttons">
-            <button id="metronome-start" class="btn btn-primary" onclick="startCPR()">Start</button>
-            <button id="metronome-stop" class="btn btn-secondary" onclick="stopCPR()" style="display:none;">Stop</button>
-            <button id="metronome-pause" class="btn btn-secondary" onclick="togglePauseCPR()" style="display:none;">Pause</button>
-          </div>
-          <div id="cpr-timer" class="cpr-timer">00:00</div>
-        </div>
-      </div>
-      </div>
-
-    <div id="cpr-events" class="cpr-sub-content">
-      <div class="form-group">
-        <label>Rhythm</label>
-        <select id="rhythm-select">
-          <option value="">Select rhythm</option>
-          <option value="unknown">Unknown</option>
-          <option value="vf">VF (Ventricular Fibrillation)</option>
-          <option value="vt">VT (Ventricular Tachycardia)</option>
-          <option value="asystole">Asystole</option>
-          <option value="pea">PEA (Pulseless Electrical Activity)</option>
-        </select>
-        <button class="btn btn-primary" onclick="logRhythmChange()">Log Rhythm</button>
-      </div>
-
-      <div class="form-group">
-        <label>Shock</label>
-        <div class="input-group">
-          <input id="shock-energy" type="number" placeholder="Energy (J)" min="1" max="360">
-          <button class="btn btn-danger" onclick="logShock()">Deliver Shock</button>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Medication</label>
-        <select id="medication-select" onchange="handleMedicationChange()">
-          <option value="">Select medication</option>
-          <option value="amiodarone">Amiodarone</option>
-          <option value="lidocaine">Lidocaine</option>
-          <option value="calcium">Calcium Chloride</option>
-          <option value="sodium-bicarb">Sodium Bicarbonate</option>
-          <option value="epinephrine">Epinephrine</option>
-          <option value="other">Other</option>
-        </select>
-        <button class="btn btn-primary" onclick="logMedication()">Log Medication</button>
-      </div>
-      <div class="form-group">
-        <label>Intervention</label>
-        <select id="intervention-select" onchange="handleInterventionChange()">
-          <option value="">Select intervention</option>
-          <option value="intubation">Intubation</option>
-          <option value="needle-decomp">Needle Decompression</option>
-          <option value="chest-tube">Chest Tube</option>
-          <option value="central-line">Central Line</option>
-          <option value="io">IO Access</option>
-          <option value="iv">IV Access</option>
-          <option value="other-int">Other</option>
-        </select>
-        <button class="btn btn-primary" onclick="logIntervention()">Log Intervention</button>
-      </div>
-      <div>
-        <label class="small">Recent Events</label>
-        <div id="cpr-events-log" class="log-list" aria-live="polite"></div>
-      </div>
-    </div>
-
-    <div id="cpr-timeline" class="cpr-sub-content">
-      <div>
-        <label class="small">CPR Timeline</label>
-        <div id="cpr-timeline-log" class="log-list" aria-live="polite"></div>
-      </div>
-    </div>
-  </div>
-
-
-  <div id="notes" class="tab-content">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="notes-current">New Patient</span>
-    </div>
-    <h2>Notes</h2>
-    <p>Notes input and log content goes here. You need a textarea for input and a button for addNote().</p>
-  </div>
-  
-  
-  <div id="results-modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-title">Handover Report</div>
-            <span class="modal-close" onclick="closeResults()">&times;</span>
-        </div>
-        <div class="modal-body">
-            <textarea id="results-output" readonly></textarea>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="copyResults()">Copy</button>
-            <button class="btn btn-primary" onclick="downloadReport()">Download</button>
-        </div>
-    </div>
-  </div>
-
-  <div id="vital-info-modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-title" id="vital-info-title">Vital Info</div>
-            <span class="modal-close" onclick="closeVitalInfoModal()">&times;</span>
-        </div>
-        <div class="modal-body">
-            <p id="vital-info-body">Details about the vital sign will appear here.</p>
-        </div>
-    </div>
-  </div>
-
-  <div id="pulse-check-modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-title">Pulse Check</div>
-            <span class="modal-close" onclick="closePulseCheckModal()">&times;</span>
-        </div>
-        <div class="modal-body">
-            <p>Two minutes of CPR completed. Check for pulse.</p>
-            <div class="form-group">
-                <label>Pulse Status</label>
-                <div class="toggle-row">
-                    <button class="btn btn-primary" onclick="pulseDetected()">Pulse Detected</button>
-                    <button class="btn btn-danger" onclick="noPulseDetected()">No Pulse</button>
-                </div>
-            </div>
-        </div>
-    </div>
-  </div>
-  
-  <div id="update-notification" class="alert-banner alert-info" style="display:none;">
-      A new version of the app is available. 
-      <button class="btn btn-inline" onclick="applyUpdate()">Update Now</button>
-      <button class="btn btn-inline" onclick="dismissUpdate()">Later</button>
-  </div>
-
-</div> 
-<script type="module" src="app.js"></script>
-
-</body>
-</html>
+});
