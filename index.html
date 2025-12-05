@@ -1,230 +1,62 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Start Vitals</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#3498db">
-<link rel="stylesheet" href="styles.css">
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').then(registration => {
-        window.swRegistration = registration;
-        setInterval(() => {
-          registration.update();
-        }, 60 * 60 * 1000);
-      }).catch(()=>{/*sw failed*/});
-    });
-  }
-</script>
-</head>
-<body>
-<div class="container">
-  <div class="header">
-    <div class="app-title">Start Vitals</div>
-    <div class="controls">
-      <button class="btn btn-results" onclick="showResults()">Results</button>
-      <div class="menu-container">
-        <button class="menu-button" onclick="toggleMenu()">⋮</button>
-        <div id="menu-dropdown" class="menu-dropdown">
-          <a href="#" onclick="checkForUpdates(); toggleMenu(); return false;">Check for Updates</a>
-        </div>
-      </div>
-    </div>
-  </div>
+const CACHE_NAME = 'start-rescue-cache-v1';
+const urlsToCache = [
+    './',
+    './index.html',
+    './styles.css',
+    './app.js',
+    './patient.js',
+    './vitals.js',
+    './gcs.js',
+    './notes.js',
+    './cpr.js',
+    './results.js',
+    './manifest.json',
+    // Add any image files (like icon-512.png) here
+];
 
-  <div class="tab-nav" role="tablist">
-    <button class="tab-button active" onclick="openTab(event,'patient-info')">Patient Info</button>
-    <button class="tab-button" onclick="openTab(event,'vitals')">Vitals</button>
-    <button class="tab-button" onclick="openTab(event,'gcs')">GCS</button>
-    <button class="tab-button cpr-active" onclick="openTab(event,'cpr')">CPR</button>
-    <button class="tab-button" onclick="openTab(event,'notes')">Notes</button>
-  </div>
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+  );
+  self.skipWaiting();
+});
 
-  <!-- PATIENT INFO -->
-  <div id="patient-info" class="tab-content active">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="patient-info-current">New Patient</span>
-    </div>
-    
-    <h2>Patient Information</h2>
-    
-    <!-- Patient selector -->
-    <div class="patient-selector">
-      <div class="form-group">
-        <label>Current Patient</label>
-        <div id="current-patient-display" class="current-patient">New Patient</div>
-        <div id="patient-list" class="patient-list"></div>
-        <button id="add-patient-btn" class="btn btn-primary small-btn" onclick="addPatient()" style="margin-top: 8px;">+ Add Patient</button>
-      </div>
-    </div>
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request)
+      .then(response => {
+        // Cache hit - return response
+        if (response) {
+          return response;
+        }
+        // No cache hit - fetch from network
+        return fetch(event.request);
+      })
+  );
+});
 
-    <div class="form-group">
-      <label for="patient-name">Name</label>
-      <input id="patient-name" placeholder="e.g., John Doe" onchange="patientNameChanged()">
-    </div>
-    <div class="form-group">
-      <label for="responder-id">Responder ID</label>
-      <input id="responder-id" placeholder="e.g., ST186" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="incident-type">Incident Type</label>
-      <select id="incident-type" onchange="patientInfoChanged()">
-        <option value="">Select incident type</option>
-        <option value="MVA - Motor Vehicle Accident">MVA - Motor Vehicle Accident</option>
-        <option value="Fall">Fall</option>
-        <option value="Cardiac Arrest">Cardiac Arrest</option>
-        <option value="Chest Pain">Chest Pain</option>
-        <option value="Stroke / TIA">Stroke / TIA</option>
-        <option value="Breathing Difficulty">Breathing Difficulty</option>
-        <option value="Diabetic Emergency">Diabetic Emergency</option>
-        <option value="Seizure">Seizure</option>
-        <option value="Allergic Reaction">Allergic Reaction</option>
-        <option value="Trauma">Trauma</option>
-        <option value="Burns">Burns</option>
-        <option value="Overdose / Poisoning">Overdose / Poisoning</option>
-        <option value="Psychiatric Emergency">Psychiatric Emergency</option>
-        <option value="Obstetric Emergency">Obstetric Emergency</option>
-        <option value="Other">Other</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="patient-age">Age</label>
-      <input id="patient-age" type="number" placeholder="e.g., 35" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="allergies">Allergies</label>
-      <input id="allergies" placeholder="e.g., Penicillin, Peanuts" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="medication">Medication</label>
-      <input id="medication" placeholder="e.g., Metformin, Lisinopril" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="history">Past History</label>
-      <input id="history" placeholder="e.g., Diabetes, Hypertension" onchange="patientInfoChanged()">
-    </div>
-    <div class="form-group">
-      <label for="last-intake">Last Intake (Food/Drink)</label>
-      <input id="last-intake" placeholder="e.g., Water at 10:00 AM" onchange="patientInfoChanged()">
-    </div>
-  </div>
+self.addEventListener('activate', event => {
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
 
-  <!-- VITALS -->
-  <div id="vitals" class="tab-content">
-    <div class="tab-patient-header">
-      <span class="patient-indicator">CURRENT PATIENT</span>
-      <span id="vitals-current">New Patient</span>
-    </div>
-    
-    <h2>Vitals</h2>
-    <div id="vitals-alert" class="alert-banner alert-none"></div>
-
-    <!-- Patient Priority -->
-    <div class="form-group">
-      <label for="patient-priority">Patient Priority</label>
-      <select id="patient-priority" onchange="patientPriorityChanged()">
-        <option value="">Select priority</option>
-        <option value="P1">P1 - Immediate (Critical/Urgent)</option>
-        <option value="P2">P2 - Urgent (Serious)</option>
-        <option value="P3">P3 - Delayed (Walking Wounded)</option>
-        <option value="P4">P4 - Deceased</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>Blood Pressure (mmHg)<span class="info-icon" onclick="showVitalInfo('bp')">?</span></label>
-      <div class="input-group">
-        <input id="bp-sys" type="number" placeholder="Systolic" oninput="updateVitalIndicator(this, 'bp-sys')">
-        <span>/</span>
-        <input id="bp-dia" type="number" placeholder="Diastolic" oninput="updateVitalIndicator(this, 'bp-dia')">
-        <span class="input-group-addon">mmHg</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="pulse">Pulse<span class="info-icon" onclick="showVitalInfo('pulse')">?</span></label>
-      <div class="input-group">
-        <input id="pulse" type="number" placeholder="e.g., 80" oninput="updateVitalIndicator(this, 'pulse')">
-        <span class="input-group-addon">bpm</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="spo2">SPO₂<span class="info-icon" onclick="showVitalInfo('spo2')">?</span></label>
-      <div class="input-group">
-        <input id="spo2" type="number" placeholder="e.g., 98" oninput="updateVitalIndicator(this, 'spo2')">
-        <span class="input-group-addon">%</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>O₂ Delivery<span class="info-icon" onclick="showVitalInfo('o2')">?</span></label>
-      <select id="o2-delivery">
-        <option value="">None</option>
-        <option value="nasal">Nasal Cannula</option>
-        <option value="mask">Face Mask</option>
-        <option value="non-rebreather">Non-rebreather Mask</option>
-        <option value="bag-valve">Bag-Valve Mask</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label for="o2-flow">O₂ Flow Rate<span class="info-icon" onclick="showVitalInfo('o2-flow')">?</span></label>
-      <div class="input-group">
-        <input id="o2-flow" type="number" placeholder="e.g., 2" step="0.5">
-        <span class="input-group-addon">L/min</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="rrate">Respiratory Rate<span class="info-icon" onclick="showVitalInfo('rrate')">?</span></label>
-      <div class="input-group">
-        <input id="rrate" type="number" placeholder="e.g., 16" oninput="updateVitalIndicator(this, 'rrate')">
-        <span class="input-group-addon">/min</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="hgt">Blood Glucose (HGT)<span class="info-icon" onclick="showVitalInfo('hgt')">?</span></label>
-      <div class="input-group">
-        <input id="hgt" type="number" step="0.1" placeholder="e.g., 5.5" oninput="updateVitalIndicator(this, 'hgt')">
-        <span class="input-group-addon">mmol/L</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="temp">Temperature<span class="info-icon" onclick="showVitalInfo('temp')">?</span></label>
-      <div class="input-group">
-        <input id="temp" type="number" step="0.1" placeholder="e.g., 36.8" oninput="updateVitalIndicator(this, 'temp')">
-        <span class="input-group-addon">°C</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="cap-refill">Capillary Refill<span class="info-icon" onclick="showVitalInfo('cap-refill')">?</span></label>
-      <div class="input-group">
-        <input id="cap-refill" type="number" placeholder="e.g., 2" oninput="updateVitalIndicator(this, 'cap-refill')">
-        <span class="input-group-addon">s</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Pupils (Left / Right)<span class="info-icon" onclick="showVitalInfo('pupils')">?</span></label>
-      <div class="pupils-input-group">
-        <input id="pupil-left" type="number" placeholder="L mm">
-        <input id="pupil-right" type="number" placeholder="R mm">
-        <span class="input-group-addon">mm</span>
-      </div>
-      <div class="pupils-checkbox">
-        <input type="checkbox" id="pupils-reactive" onchange="patientInfoChanged()">
-        <label for="pupils-reactive">Pupils reactive to light</label>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="pain">Pain Score<span class="info-icon" onclick="showVitalInfo('pain')">?</span></label>
-      <div class="input-group">
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
