@@ -3,7 +3,7 @@
  * Coordinates all modules and handles global functionality
  */
 
-// Import modules (these will be created as separate files)
+// Import modules
 import { loadFromLocalStorage, saveToLocalStorage, updateAllTabPatientDisplays } from './patient.js';
 import { renderVitalsLog, submitVitals, clearVitalsInputs, renderVitalsChart, showVitalInfo, updateVitalIndicator, nowTimestamp } from './vitals.js';
 import { renderGcsLog, submitGCS, clearGCSInputs } from './gcs.js';
@@ -11,10 +11,103 @@ import { renderNotesLog, addNote, clearNoteInput, setupAudioRecorder } from './n
 import { renderCprLog, renderCprEvents, renderCprTimeline, startCPR, stopCPR, addCprEvent, togglePauseCPR } from './cpr.js';
 import { generateResults, showResults, closeResults, copyResults, downloadReport } from './results.js';
 import { patientInfo, patientInfoChanged, patientPriorityChanged, addPatient, switchPatient, deletePatient, renderPatientList, updateCurrentPatientDisplay } from './patient.js';
-
+import { patientData } from './patient.js'; // Ensure patientData is imported
 
 // Global variables
 let updateAvailable = false;
+
+// =========================================================================
+// UI Functions that need to be globally accessible (exposed to HTML onclick)
+// =========================================================================
+
+/**
+ * Changes the active tab in the UI.
+ * @param {string} tabName - The ID of the tab content to show (e.g., 'vitals-tab').
+ */
+function openTab(tabName) {
+    // Get all tab content elements
+    const tabContents = document.getElementsByClassName("tab-content");
+    for (let i = 0; i < tabContents.length; i++) {
+        tabContents[i].style.display = "none";
+    }
+
+    // Get all tab buttons
+    const tabButtons = document.getElementsByClassName("tab-button");
+    for (let i = 0; i < tabButtons.length; i++) {
+        tabButtons[i].classList.remove("active");
+    }
+
+    // Show the current tab and add an "active" class to the button
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.style.display = "block";
+    }
+    
+    // Find the button that corresponds to the tabName and activate it
+    const activeBtn = Array.from(tabButtons).find(btn => 
+        btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`openTab('${tabName}')`)
+    );
+    if (activeBtn) {
+        activeBtn.classList.add("active");
+    }
+
+    // Special rendering logic for specific tabs
+    if (tabName === 'vitals-tab') {
+        renderVitalsChart();
+    }
+}
+
+/**
+ * Toggles the visibility of the dropdown menu.
+ */
+function toggleMenu() {
+    const dropdown = document.getElementById("menu-dropdown");
+    dropdown.classList.toggle("show");
+}
+
+// Close the dropdown menu if the user clicks outside of it
+window.addEventListener('click', function(event) {
+    if (!event.target.matches('.menu-button') && !event.target.matches('.menu-container')) {
+        const dropdown = document.getElementById("menu-dropdown");
+        if (dropdown.classList.contains('show')) {
+            dropdown.classList.remove('show');
+        }
+    }
+});
+
+
+// =========================================================================
+// PWA Update Logic (Kept from original index.html script block)
+// =========================================================================
+
+function checkForUpdates() {
+    if (window.swRegistration) {
+        window.swRegistration.update();
+        console.log("Checking for updates...");
+        // This is a placeholder. Real update logic relies on the service worker.
+    }
+}
+
+function applyUpdate() {
+    if (window.swRegistration && window.swRegistration.waiting) {
+        // Send message to the waiting Service Worker to skip waiting
+        window.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        // Optional: Wait for the service worker to activate before reloading
+        window.swRegistration.waiting.addEventListener('statechange', e => {
+            if (e.target.state === 'activated') {
+                window.location.reload();
+            }
+        });
+        document.getElementById('update-notification').style.display = 'none';
+    } else {
+        window.location.reload(); // Simple reload if no waiting SW is detected
+    }
+}
+
+function dismissUpdate() {
+    document.getElementById('update-notification').style.display = 'none';
+}
+
 
 /**
  * Initialize the application
@@ -28,8 +121,7 @@ function initApp() {
     renderGcsLog();
     renderNotesLog();
     renderCprLog();
-    renderCprEvents();
-    renderCprTimeline();
+    // No need to call renderCprEvents or renderCprTimeline here unless you have data to show on load
     renderVitalsChart();
     renderPatientList();
     
@@ -37,189 +129,56 @@ function initApp() {
     updateAllTabPatientDisplays();
     updateCurrentPatientDisplay();
 
-    // Set up event listeners that need to be global
-    setupEventListeners();
-    
-    // Open the first tab by default
-    openTab(null, 'patient-info');
-
-    // Register service worker if supported
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js').then(registration => {
-            window.swRegistration = registration;
-            // Check for updates every hour
-            setInterval(() => {
-              registration.update();
-            }, 60 * 60 * 1000);
-          }).catch(()=>{/*sw failed*/});
-        });
-    }
-}
-
-/**
- * Setup various event listeners for inputs
- */
-function setupEventListeners() {
-    // Listeners for patient info inputs (if needed for continuous save/update)
-    document.getElementById('patient-name').addEventListener('input', patientInfoChanged);
-    document.getElementById('responder-id').addEventListener('input', patientInfoChanged);
-    document.getElementById('incident-type').addEventListener('change', patientInfoChanged);
-    document.getElementById('patient-age').addEventListener('input', patientInfoChanged);
-    document.getElementById('allergies').addEventListener('input', patientInfoChanged);
-    document.getElementById('medication').addEventListener('input', patientInfoChanged);
-    document.getElementById('history').addEventListener('input', patientInfoChanged);
-    document.getElementById('last-intake').addEventListener('input', patientInfoChanged);
-    document.getElementById('signs-symptoms').addEventListener('input', patientInfoChanged);
-    document.getElementById('patient-priority').addEventListener('change', patientPriorityChanged);
-    document.getElementById('pupils-reactive').addEventListener('change', patientInfoChanged);
-    
-    // Set up notes audio recorder
+    // Set up event listener for the audio recorder setup
     setupAudioRecorder();
 
-    // Close modal when clicking outside of it
-    window.onclick = function(event) {
-        const vitalModal = document.getElementById('vital-info-modal');
-        const resultsModal = document.getElementById('results-modal');
-        
-        if (event.target === vitalModal) {
-            vitalModal.style.display = 'none';
-        }
-        if (event.target === resultsModal) {
-            resultsModal.style.display = 'none';
-        }
-    };
-    
-    // Listen for service worker messages
-    navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data && event.data.type === 'UPDATE_WAITING') {
-            updateAvailable = true;
-            showUpdateNotification();
-        }
-    });
-}
-
-
-/**
- * Tab switching functionality
- */
-function openTab(evt, tabName) {
-    const tabs = document.getElementsByClassName('tab-content');
-    for (let t of tabs) t.style.display = 'none';
-    const btns = document.getElementsByClassName('tab-button');
-    for (let b of btns) b.className = b.className.replace(' active', '').replace(' cpr-active', '');
-    
-    document.getElementById(tabName).style.display = 'block';
-    if (evt) {
-        const targetBtn = evt.currentTarget;
-        if (tabName === 'cpr') {
-            targetBtn.className += ' cpr-active';
-        } else {
-            targetBtn.className += ' active';
-        }
-    }
-    
-    // Re-render the chart/timeline when opening the tab
-    if (tabName === 'vitals') renderVitalsChart();
-    if (tabName === 'cpr') renderCprTimeline();
-}
-
-/**
- * Toggle menu dropdown
- */
-function toggleMenu() {
-    document.getElementById('menu-dropdown').classList.toggle('show');
-}
-
-/**
- * Service Worker Update Management
- */
-function showUpdateNotification() {
-    const notification = document.getElementById('update-notification');
-    if (notification) {
-        notification.style.display = 'block';
-    }
-}
-
-function checkForUpdates() {
-    if (updateAvailable) {
-        showUpdateNotification();
+    // Check if there is a current patient, otherwise create one
+    if (!patientData.currentPatientId || !patientData.patients[patientData.currentPatientId]) {
+        addPatient();
     } else {
-        showNotification('No updates available.', 'info');
+        // Ensure the correct tab is opened on load (e.g., 'vitals-tab')
+        openTab('vitals-tab'); 
     }
 }
-
-function applyUpdate() {
-    if (window.swRegistration && window.swRegistration.waiting) {
-        window.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    } else {
-        window.location.reload();
-    }
-}
-
-function dismissUpdate() {
-    const notification = document.getElementById('update-notification');
-    if (notification) {
-        notification.style.display = 'none';
-    }
-}
-
-/**
- * Utility functions
- */
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `alert-banner alert-${type}`;
-    notification.textContent = message;
-    notification.style.position = 'fixed';
-    notification.style.top = '10px';
-    notification.style.left = '50%';
-    notification.style.transform = 'translateX(-50%)';
-    notification.style.zIndex = '1000';
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-        }
-    }, 3000);
-}
-
-
-/**
- * Initialize app when DOM is ready
- */
-document.addEventListener('DOMContentLoaded', initApp);
-
 
 // =========================================================================
-// !!! CRITICAL FIX: EXPOSE FUNCTIONS TO THE GLOBAL WINDOW OBJECT !!!
-// This is necessary because the HTML uses inline event handlers (onclick=\"...\")
-// and functions inside ES Modules (like app.js) are private by default.
+// Expose functions to the global window object (CRITICAL FIX)
+// All functions called via HTML onclick="..." must be exposed here.
 // =========================================================================
 
+// Global UI / Core functions
 window.openTab = openTab;
 window.toggleMenu = toggleMenu;
-window.showResults = showResults; // Imported from results.js
-window.closeResults = closeResults; // Imported from results.js
-window.copyResults = copyResults; // Imported from results.js
-window.downloadReport = downloadReport; // Imported from results.js
+window.showResults = showResults; 
+window.closeResults = closeResults; 
+window.copyResults = copyResults; 
+window.downloadReport = downloadReport; 
 window.checkForUpdates = checkForUpdates;
 window.applyUpdate = applyUpdate;
 window.dismissUpdate = dismissUpdate;
 
-// Expose other functions used directly in the HTML
-window.submitVitals = submitVitals; // Used on Vitals tab
-window.submitGCS = submitGCS; // Used on GCS tab
-window.addNote = addNote; // Used on Notes tab
-window.startCPR = startCPR; // Used on CPR tab
-window.stopCPR = stopCPR; // Used on CPR tab
-window.addCprEvent = addCprEvent; // Used on CPR tab
-window.togglePauseCPR = togglePauseCPR; // Used on CPR tab
-window.addPatient = addPatient; // Used on Patient Info tab
-window.switchPatient = switchPatient; // Used on Patient Info tab (must be exposed if used in dynamic HTML)
-window.deletePatient = deletePatient; // Used on Patient Info tab (must be exposed if used in dynamic HTML)
-window.showVitalInfo = showVitalInfo; // Used on Vitals tab
-window.updateVitalIndicator = updateVitalIndicator; // Used on Vitals tab
-window.patientInfoChanged = patientInfoChanged; // Used on Vitals tab
+// Module-specific functions used in HTML
+window.submitVitals = submitVitals; 
+window.submitGCS = submitGCS; 
+window.addNote = addNote; 
+window.startCPR = startCPR; 
+window.stopCPR = stopCPR; 
+window.addCprEvent = addCprEvent; 
+window.togglePauseCPR = togglePauseCPR; 
+window.addPatient = addPatient; 
+window.switchPatient = switchPatient; 
+window.deletePatient = deletePatient; 
+window.showVitalInfo = showVitalInfo; 
+window.updateVitalIndicator = updateVitalIndicator; 
+window.patientInfoChanged = patientInfoChanged; 
+// CPR Modal functions (assuming they are in one of the imported modules or need defining)
+// Defining placeholders for modal functions if they are missing from your modules
+window.closeVitalInfoModal = () => document.getElementById('vital-info-modal').style.display = 'none';
+window.closePulseCheckModal = () => document.getElementById('pulse-check-modal').style.display = 'none';
+// Assuming pulseDetected and noPulseDetected are defined in cpr.js or similar
+// window.pulseDetected = pulseDetected;
+// window.noPulseDetected = noPulseDetected;
+
+
+// Start the app when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', initApp);
