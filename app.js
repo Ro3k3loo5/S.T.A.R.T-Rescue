@@ -4,14 +4,12 @@
  */
 
 // Import modules
-import { loadFromLocalStorage, saveToLocalStorage, updateAllTabPatientDisplays } from './patient.js';
-import { renderVitalsLog, submitVitals, clearVitalsInputs, renderVitalsChart, showVitalInfo, updateVitalIndicator, nowTimestamp } from './vitals.js';
-import { renderGcsLog, submitGCS, clearGCSInputs } from './gcs.js';
-import { renderNotesLog, addNote, clearNoteInput, setupAudioRecorder } from './notes.js';
-import { renderCprLog, renderCprEvents, renderCprTimeline, startCPR, stopCPR, addCprEvent, togglePauseCPR } from './cpr.js';
+import { loadFromLocalStorage, saveToLocalStorage, updateAllTabPatientDisplays, patientInfo, patientInfoChanged, patientNameChanged, patientPriorityChanged, addPatient, switchPatient, deletePatient, renderPatientList, updateCurrentPatientDisplay, currentPatientId, patients } from './patient.js';
+import { renderVitalsLog, submitVitals, clearVitalsInputs, renderVitalsChart, showVitalInfo, updateVitalIndicator, loadFromLocalStorage as loadVitals } from './vitals.js';
+import { renderGcsLog, submitGCS, clearGCSInputs, loadFromLocalStorage as loadGcs } from './gcs.js';
+import { renderNotesLog, addNote, clearNoteInput, setupAudioRecorder, loadFromLocalStorage as loadNotes } from './notes.js';
+import { renderCprLog, renderCprEvents, renderCprTimeline, startCPR, stopCPR, addCprEvent, togglePauseCPR, loadFromLocalStorage as loadCpr } from './cpr.js';
 import { generateResults, showResults, closeResults, copyResults, downloadReport } from './results.js';
-import { patientInfo, patientInfoChanged, patientPriorityChanged, addPatient, switchPatient, deletePatient, renderPatientList, updateCurrentPatientDisplay } from './patient.js';
-import { patientData } from './patient.js'; // Ensure patientData is imported
 
 // Global variables
 let updateAvailable = false;
@@ -24,37 +22,28 @@ let updateAvailable = false;
  * Changes the active tab in the UI.
  * @param {string} tabName - The ID of the tab content to show (e.g., 'vitals-tab').
  */
-function openTab(tabName) {
-    // Get all tab content elements
-    const tabContents = document.getElementsByClassName("tab-content");
-    for (let i = 0; i < tabContents.length; i++) {
-        tabContents[i].style.display = "none";
-    }
+function openTab(evt, tabName) {
+    // Hide all tab content
+    const tabs = document.getElementsByClassName('tab-content');
+    for (let t of tabs) t.style.display = 'none';
 
-    // Get all tab buttons
-    const tabButtons = document.getElementsByClassName("tab-button");
-    for (let i = 0; i < tabButtons.length; i++) {
-        tabButtons[i].classList.remove("active");
-    }
+    // Clear active class from all tab buttons
+    const btns = document.getElementsByClassName('tab-button');
+    for (let b of btns) b.classList.remove('active');
 
-    // Show the current tab and add an "active" class to the button
+    // Show selected tab
     const selectedTab = document.getElementById(tabName);
-    if (selectedTab) {
-        selectedTab.style.display = "block";
-    }
-    
-    // Find the button that corresponds to the tabName and activate it
-    const activeBtn = Array.from(tabButtons).find(btn => 
-        btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`openTab('${tabName}')`)
-    );
-    if (activeBtn) {
-        activeBtn.classList.add("active");
+    if (selectedTab) selectedTab.style.display = 'block';
+
+    // Set active button
+    if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
+    else {
+        const found = Array.from(btns).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(`openTab(event,'${tabName}')`));
+        if (found) found.classList.add('active');
     }
 
-    // Special rendering logic for specific tabs
-    if (tabName === 'vitals-tab') {
-        renderVitalsChart();
-    }
+    // Special rendering for vitals
+    if (tabName === 'vitals') renderVitalsChart();
 }
 
 /**
@@ -115,7 +104,12 @@ function dismissUpdate() {
 function initApp() {
     // Load data from localStorage
     loadFromLocalStorage();
-    
+    // Module-specific data
+    loadVitals();
+    loadGcs();
+    loadNotes();
+    loadCpr();
+
     // Render all initial data
     renderVitalsLog();
     renderGcsLog();
@@ -133,11 +127,11 @@ function initApp() {
     setupAudioRecorder();
 
     // Check if there is a current patient, otherwise create one
-    if (!patientData.currentPatientId || !patientData.patients[patientData.currentPatientId]) {
+    if (!currentPatientId || !patients[currentPatientId]) {
         addPatient();
     } else {
-        // Ensure the correct tab is opened on load (e.g., 'vitals-tab')
-        openTab('vitals-tab'); 
+        // Ensure a sensible tab is opened on load
+        openTab(null, 'patient-info');
     }
 }
 
@@ -171,6 +165,8 @@ window.deletePatient = deletePatient;
 window.showVitalInfo = showVitalInfo; 
 window.updateVitalIndicator = updateVitalIndicator; 
 window.patientInfoChanged = patientInfoChanged; 
+window.patientNameChanged = patientNameChanged; 
+window.patientPriorityChanged = patientPriorityChanged; 
 // CPR Modal functions (assuming they are in one of the imported modules or need defining)
 // Defining placeholders for modal functions if they are missing from your modules
 window.closeVitalInfoModal = () => document.getElementById('vital-info-modal').style.display = 'none';

@@ -5,13 +5,19 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
+import { nowTimestamp } from './utils.js';
 
 // Global notes data
 let notesLog = []; // newest first
 
 // Audio recording variables
 let mediaRecorder;
-let audioChunks = [];
+let audioChunks = []; 
+
+export function getNotesLog() { return notesLog; }
+
+export function setupAudioRecorder() { initAudioRecording(); }
+
 
 /**
  * Load notes data from localStorage

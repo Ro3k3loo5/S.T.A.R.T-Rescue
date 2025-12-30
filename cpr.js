@@ -5,6 +5,7 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
+import { nowTimestamp } from './utils.js';
 
 // Global CPR data
 let cprLog = [];
@@ -613,3 +614,18 @@ export function renderCprTimeline() {
         el.appendChild(div);
     });
 }
+
+// Compatibility wrappers expected by the UI
+export function startCPR() { startMetronome(); }
+export function stopCPR() { stopMetronome(); }
+export function addCprEvent() {
+    const details = prompt('Add CPR event (brief):');
+    if (!details) return;
+    const item = { time: nowTimestamp(), iso: new Date().toISOString(), type: 'note', details };
+    cprEvents.unshift(item);
+    cprTimeline.unshift(item);
+    saveToLocalStorage();
+    renderCprEvents();
+    renderCprTimeline();
+}
+export const togglePauseCPR = toggleMetronome;

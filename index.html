@@ -1,74 +1,249 @@
-const CACHE_NAME = 'start-rescue-cache-v2'; // Increased version to force update
-const urlsToCache = [
-    './',
-    './index.html',
-    './styles.css',
-    './app.js',
-    './patient.js',
-    './vitals.js',
-    './gcs.js',
-    './notes.js',
-    './cpr.js',
-    './results.js',
-    './manifest.json',
-    // External dependencies
-    'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
-    // Add any image files (like icon-512.png) here
-    './icon-512.png' 
-];
-
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('fetch', event => {
-  // Use a cache-first strategy
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
-        // No cache hit - fetch from network
-        return fetch(event.request).catch(error => {
-          // Fallback response for specific URLs if network fails
-          if (event.request.url.includes('chart.umd.min.js')) {
-            // Can't return a chart here, so just let it fail or return a simple error
-            console.error("Chart.js failed to load from network and cache.");
-          }
-          throw error;
-        });
-      })
-  );
-});
-
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          // Delete old caches
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim()) // Claim clients immediately after activation
-  );
-});
-
-// Listener to force the service worker to immediately activate upon receiving an update message
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Start Vitals</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3498db">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then(registration => {
+        // Store registration for update checking
+        window.swRegistration = registration;
+        
+        // Check for updates periodically
+        setInterval(() => {
+          registration.update();
+        }, 60 * 60 * 1000); // Check every hour
+      }).catch(()=>{/*sw failed*/});
+    });
   }
-});
+</script>
+<style>
+:root{
+  --primary-bg:#f4f7f9;
+  --secondary-bg:rgba(255,255,255,0.9);
+  --border-color:#dbe2e8;
+  --text-color:#2c3e50;
+  --primary-accent:#3498db;
+  --secondary-accent:#2ecc71;
+  --warn-amber:#f39c12;
+  --warn-red:#e74c3c;
+  --font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --normal-green:#27ae60;
+  --abnormal-orange:#e67e22;
+  --critical-red:#c0392b;
+}
+*{box-sizing:border-box}
+body{
+  font-family:var(--font-family);
+  background-color:var(--primary-bg);
+  background-image:url('icon-512.png');
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:150px 150px;
+  color:var(--text-color);
+  margin:0;
+  padding:10px;
+  font-size:16px;
+}
+.container{
+  max-width:900px;
+  margin:0 auto;
+  background-color:var(--secondary-bg);
+  border-radius:8px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.1);
+  overflow:hidden;
+  padding:0;
+}
+.header {
+  padding:12px 18px;
+  border-bottom:1px solid var(--border-color);
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.app-title { font-weight:700; font-size:1.1rem; color:var(--primary-accent); }
+.controls { margin-left:auto; font-size:0.9rem; color:#666; display:flex; gap:8px; align-items:center; }
+.tab-nav{ display:flex; background:#ecf0f1; border-bottom:1px solid var(--border-color); overflow-x:auto;}
+.tab-button{
+  padding:12px 16px; border:none; background:transparent; cursor:pointer;
+  font-size:1rem; font-weight:600; color:var(--text-color); white-space:nowrap;
+}
+.tab-button.active{ background:var(--primary-accent); color:#fff; border-bottom:3px solid var(--secondary-accent); }
+.tab-content{ display:none; padding:18px; animation:fadeIn .25s ease; }
+@keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+.form-group{ margin-bottom:16px; }
+.form-group label{ display:block; font-weight:600; margin-bottom:8px; }
+.form-group input, .form-group textarea, .form-group select{
+  width:100%; padding:10px; border:1px solid var(--border-color); border-radius:4px; font-size:1rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-group{ display:flex; gap:10px; align-items:center; }
+.input-group input{ flex:1; }
+.input-group-addon{ background:#ecf0f1; padding:10px; border:1px solid var(--border-color); border-radius:4px; }
+.gcs-section{ margin-bottom:18px; border:1px solid var(--border-color); border-radius:6px; padding:12px; }
+.gcs-option{ display:block; margin-bottom:8px; }
+#gcs-total{ font-size:1.2rem; font-weight:700; text-align:center; padding:10px; background:var(--primary-accent); color:#fff; border-radius:6px; margin-top:10px; }
+.btn{ padding:10px 14px; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
+.btn-primary{ background:var(--secondary-accent); color:#fff; }
+.btn-secondary{ background:#bdc3c7; color: var(--text-color); }
+.btn-danger{ background:#e74c3c; color:#fff; }
+.btn-info{ background:#17a2b8; color:#fff; }
+.btn-results { background: #9b59b6; color: white; }
+.small{ font-size:0.9rem; color:#555; }
+#results-output{ white-space:pre-wrap; background:#ecf0f1; border:1px solid var(--border-color); padding:12px; border-radius:6px; min-height:180px; font-family:"Courier New", monospace; }
+.kv { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+.kv label{ min-width:110px; font-weight:700; color:#333; }
+.alert-banner{
+  padding:10px 12px; border-radius:6px; color:#fff; margin-bottom:12px; font-weight:700;
+  display:flex; align-items:center; gap:10px;
+}
+.alert-none{ display:none; }
+.alert-amber{ background:var(--warn-amber); }
+.alert-red{ background:var(--warn-red); }
+.alert-info{ background:#17a2b8; }
+.log-list{ border:1px dashed var(--border-color); padding:8px; border-radius:6px; max-height:200px; overflow:auto; background:#fff; }
+.log-item{ padding:6px 8px; border-bottom:1px solid #f1f1f1; font-size:0.95rem; }
+.meta{ font-size:0.85rem; color:#666; }
+.toggle-row{ display:flex; align-items:center; gap:8px; }
+.row { display:flex; gap:10px; align-items:center; }
+.flex-2{ flex:2; }
+.flex-1{ flex:1; }
+.small-btn{ padding:6px 8px; border-radius:6px; font-weight:700; border:none; cursor:pointer; }
+.ghost{ background:transparent; border:1px solid var(--border-color); }
+
+/* New styles for vitals chart */
+.vitals-chart {
+  display: flex;
+  align-items: flex-end;
+  height: 100px;
+  margin: 10px 0;
+  border-left: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.chart-title {
+  width: 100%;
+  text-align: center;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+}
+.chart-bar {
+  flex: 1;
+  background-color: var(--primary-accent);
+  margin: 0 2px;
+  min-height: 5px;
+}
+
+/* Patient selector styles */
+.patient-selector {
+  margin-bottom: 16px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+.patient-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.patient-chip {
+  padding: 6px 12px;
+  background: #bdc3c7; /* Changed to grey for inactive patients */
+  color: white;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.patient-chip.active {
+  background: var(--secondary-accent); /* Green for active patient */
+}
+.patient-chip .remove {
+  font-weight: bold;
+  margin-left: 4px;
+}
+.current-patient {
+  font-weight: bold;
+  color: var(--primary-accent);
+  margin-bottom: 8px;
+}
+
+/* Current patient display for tabs */
+.tab-patient-header {
+  background: #f0f7f4;
+  border-left: 4px solid var(--secondary-accent);
+  padding: 8px 12px;
+  margin: -18px -18px 16px -18px;
+  font-weight: 600;
+  color: var(--secondary-accent);
+  display: flex;
+  align-items:center;
+  gap: 8px;
+}
+.tab-patient-header .patient-indicator {
+  font-size: 0.8rem;
+  background: var(--secondary-accent);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Update notification styles */
+.update-notification {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: var(--primary-accent);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  max-width: 300px;
+}
+.update-notification .update-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+.update-notification .update-actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+/* Options group styling */
+.options-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.options-group .form-group {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+/* Priority indicator styles */
+.priority-indicator {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-left: 8px;
+}
+.priority-p1 { background: #e74c3c; color: white; }
+.priority-p2 { background: #f39c12; color: white; }
+.priority-p3 { background: #3498db; color: white; }
+
+
+

@@ -5,9 +5,110 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
+import { nowTimestamp } from './utils.js';
 
 // Global vitals data
 let vitalsLog = []; // newest first
+
+/**
+ * Get a read-only reference to the current vitals log
+ */
+export function getVitalsLog() { return vitalsLog; }
+
+/**
+ * Show detailed vital info modal
+ */
+export function showVitalInfo(vitalType) {
+    const modal = document.getElementById('vital-info-modal');
+    const title = document.getElementById('vital-info-title');
+    const content = document.getElementById('vital-info-content');
+
+    // Define vital information (shortened for brevity — mirrors OldIndex.html ranges)
+    const vitalInfo = {
+        'bp': {
+            title: 'Blood Pressure',
+            description: 'Blood pressure is the force of blood pushing against the walls of the arteries as the heart pumps blood.',
+            ranges: `
+            <table class="vital-range-table">
+              <tr>
+                <th>Category</th>
+                <th>Systolic (mmHg)</th>
+                <th>Diastolic (mmHg)</th>
+              </tr>
+              <tr>
+                <td class="range-normal">Normal</td>
+                <td class="range-normal">101-159</td>
+                <td class="range-normal">71-99</td>
+              </tr>
+              <tr>
+                <td class="range-abnormal">Abnormal</td>
+                <td class="range-abnormal">90-100 or 160-200</td>
+                <td class="range-abnormal">60-70 or 100-120</td>
+              </tr>
+              <tr>
+                <td class="range-critical">Critical</td>
+                <td class="range-critical">&lt;90 or &gt;200</td>
+                <td class="range-critical">&lt;60 or &gt;120</td>
+              </tr>
+            </table>
+            `
+        },
+        'pulse': {
+            title: 'Pulse',
+            description: 'Pulse is the rate at which the heart beats, measured in beats per minute (bpm).',
+            ranges: `
+            <table class="vital-range-table">
+              <tr>
+                <th>Category</th>
+                <th>Range (bpm)</th>
+              </tr>
+              <tr>
+                <td class="range-normal">Normal</td>
+                <td class="range-normal">51-99</td>
+              </tr>
+              <tr>
+                <td class="range-abnormal">Abnormal</td>
+                <td class="range-abnormal">40-50 or 100-130</td>
+              </tr>
+              <tr>
+                <td class="range-critical">Critical</td>
+                <td class="range-critical">&lt;40 or &gt;130</td>
+              </tr>
+            </table>
+            `
+        },
+        'spo2': {
+            title: 'SPO₂ (Oxygen Saturation)',
+            description: 'SPO₂ measures the percentage of hemoglobin in the blood that is saturated with oxygen.',
+            ranges: `
+            <table class="vital-range-table">
+              <tr>
+                <th>Category</th>
+                <th>Range (%)</th>
+              </tr>
+              <tr>
+                <td class="range-normal">Normal</td>
+                <td class="range-normal">95-100</td>
+              </tr>
+              <tr>
+                <td class="range-abnormal">Abnormal</td>
+                <td class="range-abnormal">90-94</td>
+              </tr>
+              <tr>
+                <td class="range-critical">Critical</td>
+                <td class="range-critical">&lt;90</td>
+              </tr>
+            </table>
+            `
+        }
+    };
+
+    const info = vitalInfo[vitalType] || { title: 'Vital', description: '', ranges: '' };
+    title.textContent = info.title;
+    content.innerHTML = `<p>${info.description}</p>${info.ranges}`;
+    modal.style.display = 'block';
+}
+
 
 /**
  * Load vitals data from localStorage

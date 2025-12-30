@@ -5,9 +5,13 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
+import { nowTimestamp } from './utils.js';
 
 // Global GCS data
 let gcsLog = []; // newest first
+
+export function getGcsLog() { return gcsLog; }
+
 
 /**
  * Load GCS data from localStorage

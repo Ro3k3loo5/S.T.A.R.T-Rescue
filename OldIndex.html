@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Start Vitals</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3498db">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then(registration => {
+        // Store registration for update checking
+        window.swRegistration = registration;
+        
+        // Check for updates periodically
+        setInterval(() => {
+          registration.update();
+        }, 60 * 60 * 1000); // Check every hour
+      }).catch(()=>{/*sw failed*/});
+    });
+  }
+</script>
+<style>
+:root{
+  --primary-bg:#f4f7f9;
+  --secondary-bg:rgba(255,255,255,0.9);
+  --border-color:#dbe2e8;
+  --text-color:#2c3e50;
+  --primary-accent:#3498db;
+  --secondary-accent:#2ecc71;
+  --warn-amber:#f39c12;
+  --warn-red:#e74c3c;
+  --font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --normal-green:#27ae60;
+  --abnormal-orange:#e67e22;
+  --critical-red:#c0392b;
+}
+*{box-sizing:border-box}
+body{
+  font-family:var(--font-family);
+  background-color:var(--primary-bg);
+  background-image:url('icon-512.png');
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:150px 150px;
+  color:var(--text-color);
+  margin:0;
+  padding:10px;
+  font-size:16px;
+}
+.container{
+  max-width:900px;
+  margin:0 auto;
+  background-color:var(--secondary-bg);
+  border-radius:8px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.1);
+  overflow:hidden;
+  padding:0;
+}
+.header {
+  padding:12px 18px;
+  border-bottom:1px solid var(--border-color);
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.app-title { font-weight:700; font-size:1.1rem; color:var(--primary-accent); }
+.controls { margin-left:auto; font-size:0.9rem; color:#666; display:flex; gap:8px; align-items:center; }
+.tab-nav{ display:flex; background:#ecf0f1; border-bottom:1px solid var(--border-color); overflow-x:auto;}
+.tab-button{
+  padding:12px 16px; border:none; background:transparent; cursor:pointer;
+  font-size:1rem; font-weight:600; color:var(--text-color); white-space:nowrap;
+}
+.tab-button.active{ background:var(--primary-accent); color:#fff; border-bottom:3px solid var(--secondary-accent); }
+.tab-content{ display:none; padding:18px; animation:fadeIn .25s ease; }
+@keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+.form-group{ margin-bottom:16px; }
+.form-group label{ display:block; font-weight:600; margin-bottom:8px; }
+.form-group input, .form-group textarea, .form-group select{
+  width:100%; padding:10px; border:1px solid var(--border-color); border-radius:4px; font-size:1rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-group{ display:flex; gap:10px; align-items:center; }
+.input-group input{ flex:1; }
+.input-group-addon{ background:#ecf0f1; padding:10px; border:1px solid var(--border-color); border-radius:4px; }
+.gcs-section{ margin-bottom:18px; border:1px solid var(--border-color); border-radius:6px; padding:12px; }
+.gcs-option{ display:block; margin-bottom:8px; }
+#gcs-total{ font-size:1.2rem; font-weight:700; text-align:center; padding:10px; background:var(--primary-accent); color:#fff; border-radius:6px; margin-top:10px; }
+.btn{ padding:10px 14px; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
+.btn-primary{ background:var(--secondary-accent); color:#fff; }
+.btn-secondary{ background:#bdc3c7; color: var(--text-color); }
+.btn-danger{ background:#e74c3c; color:#fff; }
+.btn-info{ background:#17a2b8; color:#fff; }
+.btn-results { background: #9b59b6; color: white; }
+.small{ font-size:0.9rem; color:#555; }
+#results-output{ white-space:pre-wrap; background:#ecf0f1; border:1px solid var(--border-color); padding:12px; border-radius:6px; min-height:180px; font-family:"Courier New", monospace; }
+.kv { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+.kv label{ min-width:110px; font-weight:700; color:#333; }
+.alert-banner{
+  padding:10px 12px; border-radius:6px; color:#fff; margin-bottom:12px; font-weight:700;
+  display:flex; align-items:center; gap:10px;
+}
+.alert-none{ display:none; }
+.alert-amber{ background:var(--warn-amber); }
+.alert-red{ background:var(--warn-red); }
+.alert-info{ background:#17a2b8; }
+.log-list{ border:1px dashed var(--border-color); padding:8px; border-radius:6px; max-height:200px; overflow:auto; background:#fff; }
+.log-item{ padding:6px 8px; border-bottom:1px solid #f1f1f1; font-size:0.95rem; }
+.meta{ font-size:0.85rem; color:#666; }
+.toggle-row{ display:flex; align-items:center; gap:8px; }
+.row { display:flex; gap:10px; align-items:center; }
+.flex-2{ flex:2; }
+.flex-1{ flex:1; }
+.small-btn{ padding:6px 8px; border-radius:6px; font-weight:700; border:none; cursor:pointer; }
+.ghost{ background:transparent; border:1px solid var(--border-color); }
+
+/* New styles for vitals chart */
+.vitals-chart {
+  display: flex;
+  align-items: flex-end;
+  height: 100px;
+  margin: 10px 0;
+  border-left: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.chart-title {
+  width: 100%;
+  text-align: center;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+}
+.chart-bar {
+  flex: 1;
+  background-color: var(--primary-accent);
+  margin: 0 2px;
+  min-height: 5px;
+}
+
+/* Patient selector styles */
+.patient-selector {
+  margin-bottom: 16px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+.patient-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.patient-chip {
+  padding: 6px 12px;
+  background: #bdc3c7; /* Changed to grey for inactive patients */
+  color: white;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.patient-chip.active {
+  background: var(--secondary-accent); /* Green for active patient */
+}
+.patient-chip .remove {
+  font-weight: bold;
+  margin-left: 4px;
+}
+.current-patient {
+  font-weight: bold;
+  color: var(--primary-accent);
+  margin-bottom: 8px;
+}
+
+/* Current patient display for tabs */
+.tab-patient-header {
+  background: #f0f7f4;
+  border-left: 4px solid var(--secondary-accent);
+  padding: 8px 12px;
+  margin: -18px -18px 16px -18px;
+  font-weight: 600;
+  color: var(--secondary-accent);
+  display: flex;
+  align-items:center;
+  gap: 8px;
+}
+.tab-patient-header .patient-indicator {
+  font-size: 0.8rem;
+  background: var(--secondary-accent);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Update notification styles */
+.update-notification {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: var(--primary-accent);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  max-width: 300px;
+}
+.update-notification .update-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+.update-notification .update-actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+/* Options group styling */
+.options-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.options-group .form-group {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+/* Priority indicator styles */
+.priority-indicator {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-left: 8px;
+}
+.priority-p1 { background: #e74c3c; color: white; }
+.priority-p2 { background: #f39c12; color: white; }
+.priority-p3 { background: #3498db; color: white; }
+.priority-p4 { background: #95a5a6; color: white; }
+
+/* Color-coded vital indicators */
+.vital-normal {
+  border-color: var(--normal-green) !important;
+  box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.2) !important;
+}
+.vital-abnormal {
+  border-color: var(--abnormal-orange) !important;
+  box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.2) !important;
+}
+.vital-critical {
+  border-color: var(--critical-red) !important;
+  box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.3) !important;
+}
+
+/* Color indicators in log display */
+.vital-value-normal { color: var(--normal-green); font-weight: 600; }
+.vital-value-abnormal { color: var(--abnormal-orange); font-weight: 600; }
+.vital-value-critical { color: var(--critical-red); font-weight: 700; }
+
+/* Info icon and modal styles */
+.info-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: var(--primary-accent);
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 16px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 6px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.info-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 1000;
+  overflow: auto;
+}
+
+.info-modal-content {
+  background-color: #fff;
+  margin: 10% auto;
+  padding: 20px;
+  border-radius: 8px;
+  width: 80%;
+  max-width: 500px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  position: relative;
+}
+
+.info-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #777;
+  cursor: pointer;
+}
+
+.info-modal-close:hover {
+  color: #333;
+}
+
+.vital-range-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.vital-range-table th, .vital-range-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.vital-range-table th {
+  background-color: #f2f2f2;
+}
+
+.range-normal { color: var(--normal-green); font-weight: 600; }
+.range-abnormal { color: var(--abnormal-orange); font-weight: 600; }
+.range-critical { color: var(--critical-red); font-weight: 700; }
+
+/* Results modal styles */
+.results-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 1000;
+  overflow: auto;
+}
+
+.results-modal-content {
+  background-color: #fff;
+  margin: 2% auto;
+  padding: 0;
+  border-radius: 8px;
+  width: 95%;
+  max-width: 900px;
+  max-height: 95vh;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.results-modal-header {
+  background: var(--primary-accent);
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.results-modal-close {
+  font-size: 28px;
+  font-weight: bold;
+  color: white;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.results-modal-close:hover {
+  opacity: 0.8;
+}
+
+.results-modal-body {
+  padding: 20px;
+  max-height: calc(95vh - 60px);
+  overflow-y: auto;
+}
+
+/* Three-dot menu styles */
+.menu-container {
+  position: relative;
+  display: inline-block;
+}
+
+.menu-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-color);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.menu-button:hover {
+  background-color: rgba(0,0,0,0.1);
+}
+
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: white;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 1001;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+
+.menu-dropdown a {
+  color: var(--text-color);
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.menu-dropdown a:hover {
+  background-color: #f1f1f1;
+}
+
+.menu-dropdown a:first-child {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.menu-dropdown a:last-child {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.show { display: block; }
+
+/* Pupils input group styling */
+.pupils-input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pupils-input-group input {
+  flex: 1;
+  min-width: 80px;
+}
+.pupils-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pupils-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.pupils-checkbox label {
+  font-weight: normal;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-color);
+}
+
+/* GCS Info Section Styles */
+.gcs-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gcs-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.gcs-total-info {
+  margin-top: 20px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid var(--primary-accent);
+}
+
+.gcs-total-info h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: var(--primary-accent);
+}
+
+.gcs-total-info p {
+  margin-bottom: 6px;
+}
+
+.gcs-total-info ul {
+  margin-top: 8px;
+  margin-bottom: 0;
+  padding-left: 20px;
+}
+
+.gcs-total-info li {
+  margin-bottom: 4px;
+}
+
+@media (max-width:700px){
+  .kv label{ min-width:90px; }
+  .header{ flex-direction:column; align-items:flex-start; gap:6px; }
+  .controls { flex-direction: column; align-items: flex-start; margin-left: 0; margin-top: 8px; width: 100%; }
+  .controls .menu-container { align-self: flex-end; }
+  .options-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .info-modal-content {
+    width: 95%;
+    margin: 5% auto;
+  }
+  .results-modal-content {
+    width: 98%;
+    margin: 1% auto;
+  }
+  .pupils-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pupils-checkbox {
+    margin-top: 6px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="app-title">Start Vitals</div>
+    <div class="controls">
+      <button class="btn btn-results" onclick="showResults()">Results</button>
+      <div class="menu-container">
+        <button class="menu-button" onclick="toggleMenu()">⋮</button>
+        <div id="menu-dropdown" class="menu-dropdown">
+          <a href="#" onclick="checkForUpdates(); toggleMenu(); return false;">Check for Updates</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-nav" role="tablist">
+    <button class="tab-button active" onclick="openTab(event,'patient-info')">Patient Info</button>
+    <button class="tab-button" onclick="openTab(event,'vitals')">Vitals</button>
+    <button class="tab-button" onclick="openTab(event,'gcs')">GCS</button>
+    <button class="tab-button" onclick="openTab(event,'notes')">Notes</button>
+  </div>
+
+  <!-- PATIENT INFO -->
+  <div id="patient-info" class="tab-content active">
+    <div class="tab-patient-header">
+      <span class="patient-indicator">CURRENT PATIENT</span>
+      <span id="patient-info-current">New Patient</span>
+    </div>
+    
+    <h2>Patient Information</h2>
+    
+    <!-- Patient selector -->
+    <div class="patient-selector">
+      <div class="form-group">
+        <label>Current Patient</label>
+        <div id="current-patient-display" class="current-patient">New Patient</div>
+        <div id="patient-list" class="patient-list"></div>
+        <button id="add-patient-btn" class="btn btn-primary small-btn" onclick="addPatient()" style="margin-top: 8px;">+ Add Patient</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="patient-name">Name</label>
+      <input id="patient-name" placeholder="e.g., John Doe" onchange="patientNameChanged()">
+    </div>
+    <div class="form-group">
+      <label for="responder-id">Responder ID</label>
+      <input id="responder-id" placeholder="e.g., ST186" onchange="patientInfoChanged()">
+    </div>
+    <div class="form-group">
+      <label for="incident-type">Incident Type</label>
+      <select id="incident-type" onchange="patientInfoChanged()">
+        <option value="">Select incident type</option>
+        <option value="MVA - Motor Vehicle Accident">MVA - Motor Vehicle Accident</option>
+        <option value="Fall">Fall</option>
+        <option value="Cardiac Arrest">Cardiac Arrest</option>
+        <option value="Chest Pain">Chest Pain</option>
+        <option value="Stroke / TIA">Stroke / TIA</option>
+        <option value="Breathing Difficulty">Breathing Difficulty</option>
+        <option value="Diabetic Emergency">Diabetic Emergency</option>
+        <option value="Seizure">Seizure</option>
+        <option value="Allergic Reaction">Allergic Reaction</option>
+        <option value="Trauma">Trauma</option>
+        <option value="Burns">Burns</option>
+        <option value="Overdose / Poisoning">Overdose / Poisoning</option>
+        <option value="Psychiatric Emergency">Psychiatric Emergency</option>
+        <option value="Obstetric Emergency">Obstetric Emergency</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="patient-age">Age</label>
+      <input id="patient-age" type="number" placeholder="e.g., 35" onchange="patientInfoChanged()">
+    </div>
+    <div class="form-group">
+      <label for="allergies">Allergies</label>
+      <input id="allergies" placeholder="e.g., Penicillin, Peanuts" onchange="patientInfoChanged()">
+    </div>
+    <div class="form-group">
+      <label for="medication">Medication</label>
+      <input id="medication" placeholder="e.g., Metformin, Lisinopril" onchange="patientInfoChanged()">
+    </div>
+    <div class="form-group">
+      <label for="history">Past History</label>
+      <input id="history" placeholder="e.g., Diabetes, Hypertension" onchange="patientInfoChanged()">
+    </div>
+    <div class="form-group">
+      <label for="last-intake">Last Intake (Food/Drink)</label>
+      <input id="last-intake" placeholder="e.g., Water at 10:00 AM" onchange="patientInfoChanged()">
+    </div>
+  </div>
+
+  <!-- VITALS -->
+  <div id="vitals" class="tab-content">
+    <div class="tab-patient-header">
+      <span class="patient-indicator">CURRENT PATIENT</span>
+      <span id="vitals-current">New Patient</span>
+    </div>
+    
+    <h2>Vitals</h2>
+    <div id="vitals-alert" class="alert-banner alert-none"></div>
+
+    <!-- Patient Priority -->
+    <div class="form-group">
+      <label for="patient-priority">Patient Priority</label>
+      <select id="patient-priority" onchange="patientPriorityChanged()">
+        <option value="">Select priority</option>
+        <option value="P1">P1 - Immediate (Critical/Urgent)</option>
+        <option value="P2">P2 - Urgent (Serious)</option>
+        <option value="P3">P3 - Delayed (Walking Wounded)</option>
+        <option value="P4">P4 - Deceased</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Blood Pressure (mmHg)<span class="info-icon" onclick="showVitalInfo('bp')">?</span></label>
+      <div class="input-group">
+        <input id="bp-sys" type="number" placeholder="Systolic" oninput="updateVitalIndicator(this, 'bp-sys')">
+        <span>/</span>
+        <input id="bp-dia" type="number" placeholder="Diastolic" oninput="updateVitalIndicator(this, 'bp-dia')">
+        <span class="input-group-addon">mmHg</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="pulse">Pulse<span class="info-icon" onclick="showVitalInfo('pulse')">?</span></label>
+      <div class="input-group">
+        <input id="pulse" type="number" placeholder="e.g., 80" oninput="updateVitalIndicator(this, 'pulse')">
+        <span class="input-group-addon">bpm</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="spo2">SPO₂<span class="info-icon" onclick="showVitalInfo('spo2')">?</span></label>
+      <div class="input-group">
+        <input id="spo2" type="number" placeholder="e.g., 98" oninput="updateVitalIndicator(this, 'spo2')">
+        <span class="input-group-addon">%</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>O₂ Delivery<span class="info-icon" onclick="showVitalInfo('o2')">?</span></label>
+      <select id="o2-delivery">
+        <option value="">None</option>
+        <option value="nasal">Nasal Cannula</option>
+        <option value="mask">Face Mask</option>
+        <option value="non-rebreather">Non-rebreather Mask</option>
+        <option value="bag-valve">Bag-Valve Mask</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="o2-flow">O₂ Flow Rate<span class="info-icon" onclick="showVitalInfo('o2-flow')">?</span></label>
+      <div class="input-group">
+        <input id="o2-flow" type="number" placeholder="e.g., 2" step="0.5">
+        <span class="input-group-addon">L/min</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="rrate">Respiratory Rate<span class="info-icon" onclick="showVitalInfo('rrate')">?</span></label>
+      <div class="input-group">
+        <input id="rrate" type="number" placeholder="e.g., 16" oninput="updateVitalIndicator(this, 'rrate')">
+        <span class="input-group-addon">/min</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="hgt">Blood Glucose (HGT)<span class="info-icon" onclick="showVitalInfo('hgt')">?</span></label>
+      <div class="input-group">
+        <input id="hgt" type="number" step="0.1" placeholder="e.g., 5.5" oninput="updateVitalIndicator(this, 'hgt')">
+        <span class="input-group-addon">mmol/L</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="temp">Temperature<span class="info-icon" onclick="showVitalInfo('temp')">?</span></label>
+      <div class="input-group">
+        <input id="temp" type="number" step="0.1" placeholder="e.g., 36.8" oninput="updateVitalIndicator(this, 'temp')">
+        <span class="input-group-addon">°C</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="cap-refill">Capillary Refill<span class="info-icon" onclick="showVitalInfo('cap-refill')">?</span></label>
+      <div class="input-group">
+        <input id="cap-refill" type="number" placeholder="e.g., 2" oninput="updateVitalIndicator(this, 'cap-refill')">
+        <span class="input-group-addon">s</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Pupils (Left / Right)<span class="info-icon" onclick="showVitalInfo('pupils')">?</span></label>
+      <div class="pupils-input-group">
+        <input id="pupil-left" type="number" placeholder="L mm">
+        <input id="pupil-right" type="number" placeholder="R mm">
+        <span class="input-group-addon">mm</span>
+      </div>
+      <div class="pupils-checkbox">
+        <input type="checkbox" id="pupils-reactive" onchange="patientInfoChanged()">
+        <label for="pupils-reactive">Pupils reactive to light</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="pain">Pain Score<span class="info-icon" onclick="showVitalInfo('pain')">?</span></label>
+      <div class="input-group">
+        <input id="pain" type="number" min="0" max="10" placeholder="e.g., 7" oninput="updateVitalIndicator(this, 'pain')">
+        <span class="input-group-addon">/10</span>
+      </div>
+    </div>
+
+    <!-- New fields -->
+    <div class="form-group">
+      <label for="ecg">ECG Rhythm<span class="info-icon" onclick="showVitalInfo('ecg')">?</span></label>
+      <select id="ecg">
+        <option value="">Select rhythm</option>
+        <option value="sinus">Sinus</option>
+        <option value="sinus-tach">Sinus Tachycardia</option>
+        <option value="sinus-brady">Sinus Bradycardia</option>
+        <option value="afib">Atrial Fibrillation</option>
+        <option value="vtach">Ventricular Tachycardia</option>
+        <option value="vfib">Ventricular Fibrillation</option>
+        <option value="asystole">Asystole</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="pain-location">Pain Location<span class="info-icon" onclick="showVitalInfo('pain-location')">?</span></label>
+      <input id="pain-location" placeholder="e.g., Chest, Left arm">
+    </div>
+
+    <div class="form-group">
+      <label for="skin">Skin Condition<span class="info-icon" onclick="showVitalInfo('skin')">?</span></label>
+      <select id="skin">
+        <option value="">Select condition</option>
+        <option value="normal">Normal</option>
+        <option value="pale">Pale</option>
+        <option value="cyanotic">Cyanotic</option>
+        <option value="flushed">Flushed</option>
+        <option value="mottled">Mottled</option>
+        <option value="diaphoretic">Diaphoretic</option>
+      </select>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <button class="btn btn-primary" onclick="submitVitals()">Submit Vitals</button>
+      <button class="btn ghost small-btn" onclick="clearVitalsInputs()">Clear Inputs</button>
+      <div style="margin-left:auto;" class="small">Vitals log kept locally for this patient</div>
+    </div>
+
+    <div>
+      <label class="small">Recent Vitals (newest first)</label>
+      <div id="vitals-log" class="log-list" aria-live="polite"></div>
+    </div>
+
+    <!-- Vitals chart -->
+    <div id="vitals-chart-container"></div>
+  </div>
+
+  <!-- GCS -->
+  <div id="gcs" class="tab-content">
+    <div class="tab-patient-header">
+      <span class="patient-indicator">CURRENT PATIENT</span>
+      <span id="gcs-current">New Patient</span>
+    </div>
+    
+    <h2>Glasgow Coma Scale (GCS)</h2>
+    <div id="gcs-alert" class="alert-banner alert-none"></div>
+
+    <div class="gcs-section">
+      <div class="gcs-info-header">
+        <h3 class="gcs-section-title">Eye Opening Response<span class="info-icon" onclick="showVitalInfo('gcs-eye')">?</span></h3>
+      </div>
+      <label class="gcs-option"><input type="radio" name="gcs-eye" value="4"> Spontaneous (4)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-eye" value="3"> To Speech (3)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-eye" value="2"> To Pain (2)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-eye" value="1"> No Response (1)</label>
+    </div>
+
+    <div class="gcs-section">
+      <div class="gcs-info-header">
+        <h3 class="gcs-section-title">Verbal Response<span class="info-icon" onclick="showVitalInfo('gcs-verbal')">?</span></h3>
+      </div>
+      <label class="gcs-option"><input type="radio" name="gcs-verbal" value="5"> Orientated (5)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-verbal" value="4"> Confused (4)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-verbal" value="3"> Inappropriate Words (3)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-verbal" value="2"> Incomprehensible Sounds (2)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-verbal" value="1"> No Response (1)</label>
+    </div>
+
+    <div class="gcs-section">
+      <div class="gcs-info-header">
+        <h3 class="gcs-section-title">Motor Response<span class="info-icon" onclick="showVitalInfo('gcs-motor')">?</span></h3>
+      </div>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="6"> Obeys Commands (6)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="5"> Localises to Pain (5)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="4"> Withdraws from Pain (4)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="3"> Flexion to Pain (decorticate) (3)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="2"> Extension to Pain (decerebrate) (2)</label>
+      <label class="gcs-option"><input type="radio" name="gcs-motor" value="1"> No Response (1)</label>
+    </div>
+
+    <div id="gcs-total" class="meta">Total GCS Score: 0 / 15</div>
+    
+    <div class="gcs-total-info">
+      <h4>GCS Score Interpretation<span class="info-icon" onclick="showVitalInfo('gcs-total')">?</span></h4>
+      <p>The Glasgow Coma Scale provides a standardized way to assess a patient's level of consciousness:</p>
+      <ul>
+        <li><strong>13-15:</strong> Mild brain injury</li>
+        <li><strong>9-12:</strong> Moderate brain injury</li>
+        <li><strong>3-8:</strong> Severe brain injury</li>
+        <li><strong>3:</strong> Deep coma or brain death</li>
+      </ul>
+      <p>Score of 8 or less typically indicates the need for airway protection.</p>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center; margin-top:12px; margin-bottom:12px;">
+      <button class="btn btn-primary" onclick="submitGCS()">Submit GCS</button>
+      <button class="btn ghost small-btn" onclick="clearGCSInputs()">Clear</button>
+      <div style="margin-left:auto;" class="small">GCS log kept locally for this patient</div>
+    </div>
+
+    <div>
+      <label class="small">Recent GCS (newest first)</label>
+      <div id="gcs-log" class="log-list" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- NOTES -->
+  <div id="notes" class="tab-content">
+    <div class="tab-patient-header">
+      <span class="patient-indicator">CURRENT PATIENT</span>
+      <span id="notes-current">New Patient</span>
+    </div>
+    
+    <h2>Signs/Symptoms & Notes</h2>
+
+    <div class="form-group">
+      <label for="signs-symptoms">Signs / Symptoms (static entry)</label>
+      <textarea id="signs-symptoms" placeholder="Describe patient's signs and symptoms..." onchange="patientInfoChanged()"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="general-note">Add a timed note</label>
+      <textarea id="general-note" placeholder="e.g., Patient reports chest pain..."></textarea>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <button class="btn btn-primary" onclick="addNote()">Add Note</button>
+      <button class="btn ghost small-btn" onclick="clearNoteInput()">Clear</button>
+    </div>
+
+    <!-- Audio recording -->
+    <div class="form-group">
+      <button id="record-note" class="btn btn-secondary">Record Audio Note</button>
+      <div id="audio-notes" class="log-list"></div>
+    </div>
+
+    <div>
+      <label class="small">Notes (newest first)</label>
+      <div id="notes-log" class="log-list" aria-live="polite"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Update notification (hidden by default) -->
+<div id="update-notification" class="update-notification" style="display: none;">
+  <div>A new version of the app is available!</div>
+  <div class="update-actions">
+    <button onclick="applyUpdate()">Update Now</button>
+    <button onclick="dismissUpdate()">Later</button>
+  </div>
+</div>
+
+<!-- Vital Info Modal -->
+<div id="vital-info-modal" class="info-modal">
+  <div class="info-modal-content">
+    <span class="info-modal-close" onclick="closeVitalInfo()">&times;</span>
+    <h3 id="vital-info-title">Vital Information</h3>
+    <div id="vital-info-content"></div>
+  </div>
+</div>
+
+<!-- Results Modal -->
+<div id="results-modal" class="results-modal">
+  <div class="results-modal-content">
+    <div class="results-modal-header">
+      <h2>Consolidated Results</h2>
+      <button class="results-modal-close" onclick="closeResults()">&times;</button>
+    </div>
+    <div class="results-modal-body">
+      <div id="results-alert" class="alert-banner alert-none"></div>
+
+      <div class="options-group">
+        <div class="form-group">
+          <label class="toggle-row"><input type="checkbox" id="show-timestamps" checked> Include timestamps</label>
+        </div>
+        <div class="form-group">
+          <label class="toggle-row"><input type="checkbox" id="sbar-format"> Use SBAR format</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <button class="btn btn-primary" onclick="generateResults()">Generate Handover Results</button>
+        <button class="btn btn-danger" style="margin-left:8px" onclick="startNewScene()">Start New Scene</button>
+      </div>
+
+      <div class="form-group">
+        <label for="results-output">Copy the text below:</label>
+        <textarea id="results-output" readonly></textarea>
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" onclick="copyResults()">Copy to Clipboard</button>
+        <button class="btn ghost small-btn" onclick="downloadReport()">Download .txt</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -------------------------
+   In-memory data structures
+   ------------------------- */
+let patientInfo = {
+  responderId: '',
+  incident: '',
+  name: '',
+  age: '',
+  allergies: '',
+  medication: '',
+  history: '',
+  lastIntake: '',
+  signsSymptoms: '',
+  priority: '',
+  pupilsReactive: false
+};
+
+let vitalsLog = []; // newest first
+let gcsLog = [];    // newest first
+let notesLog = [];  // newest first
+
+// Patient management
+let currentPatientId = null;
+let patients = {}; // Object to store multiple patients
+
+// Audio recording
+let mediaRecorder;
+let audioChunks = [];
+
+/* -------------------------
+   Update management
+   ------------------------- */
+let updateAvailable = false;
+
+function checkForUpdates() {
+  if (!window.swRegistration) {
+    alert('Service worker not available. Please refresh the page.');
+    return;
+  }
+  
+  window.swRegistration.update().then(() => {
+    // The updatefound event will handle showing the notification
+    setTimeout(() => {
+      if (!updateAvailable) {
+        showNotification('No updates available. You have the latest version.', 'info');
+      }
+    }, 1000);
+  });
+}
+
+// Listen for service worker updates
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  // When the new service worker takes control, reload the page
+  window.location.reload();
+});
+
+navigator.serviceWorker.addEventListener('message', event => {
+  if (event.data && event.data.type === 'UPDATE_AVAILABLE') {
+    showUpdateNotification();
+  }
+});
+
+function showUpdateNotification() {
+  updateAvailable = true;
+  document.getElementById('update-notification').style.display = 'block';
+}
+
+function applyUpdate() {
+  if (window.swRegistration && window.swRegistration.waiting) {
+    // Tell the waiting service worker to skip waiting
+    window.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+  } else {
+    // Fallback: just reload the page
+    window.location.reload();
+  }
+}
+
+function dismissUpdate() {
+  document.getElementById('update-notification').style.display = 'none';
+}
+
+function showNotification(message, type = 'info') {
+  // Create a temporary notification
+  const notification = document.createElement('div');
+  notification.className = `alert-banner alert-${type}`;
+  notification.textContent = message;
+  notification.style.position = 'fixed';
+  notification.style.top = '10px';
+  notification.style.left = '50%';
+  notification.style.transform = 'translateX(-50%)';
+  notification.style.zIndex = '1000';
+  
+  document.body.appendChild(notification);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.parentNode.removeChild(notification);
+    }
+  }, 3000);
+}
+
+/* -------------------------
+   Menu functions
+   ------------------------- */
+function toggleMenu() {
+  document.getElementById("menu-dropdown").classList.toggle("show");
+}
+
+// Close the dropdown menu if the user clicks outside of it
+window.onclick = function(event) {
+  if (!event.target.matches('.menu-button')) {
+    const dropdowns = document.getElementsByClassName("menu-dropdown");
+    for (let i = 0; i < dropdowns.length; i++) {
+      const openDropdown = dropdowns[i];
+      if (openDropdown.classList.contains('show')) {
+        openDropdown.classList.remove('show');
+      }
+    }
+  }
+}
+
+/* -------------------------
+   Utility helpers
+   ------------------------- */
+function nowTimestamp() {
+  const d = new Date();
+  // hh:mm (24h)
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${hh}:${mm}`;
+}
+
+function formatDateTimeISO() {
+  return new Date().toISOString();
+}
+
+// Local storage functions
+function saveToLocalStorage() {
+  localStorage.setItem('patientInfo', JSON.stringify(patientInfo));
+  localStorage.setItem('vitalsLog', JSON.stringify(vitalsLog));
+  localStorage.setItem('gcsLog', JSON.stringify(gcsLog));
+  localStorage.setItem('notesLog', JSON.stringify(notesLog));
+  localStorage.setItem('currentPatientId', currentPatientId);
+  localStorage.setItem('patients', JSON.stringify(patients));
+}
+
+function loadFromLocalStorage() {
+  const savedPatientInfo = localStorage.getItem('patientInfo');
+  if (savedPatientInfo) patientInfo = JSON.parse(savedPatientInfo);
+  
+  const savedVitals = localStorage.getItem('vitalsLog');
+  if (savedVitals) vitalsLog = JSON.parse(savedVitals);
+  
+  const savedGCS = localStorage.getItem('gcsLog');
+  if (savedGCS) gcsLog = JSON.parse(savedGCS);
+  
+  const savedNotes = localStorage.getItem('notesLog');
+  if (savedNotes) notesLog = JSON.parse(savedNotes);
+  
+  const savedCurrentPatientId = localStorage.getItem('currentPatientId');
+  if (savedCurrentPatientId) currentPatientId = savedCurrentPatientId;
+  
+  const savedPatients = localStorage.getItem('patients');
+  if (savedPatients) patients = JSON.parse(savedPatients);
+}
+
+// Patient management functions
+function addPatient() {
+  // Save current patient if exists
+  if (currentPatientId) {
+    patients[currentPatientId] = {
+      info: {...patientInfo},
+      vitals: [...vitalsLog],
+      gcs: [...gcsLog],
+      notes: [...notesLog]
+    };
+  }
+  
+  // Create new patient with empty data
+  const patientId = Date.now().toString();
+  patients[patientId] = {
+    info: {
+      responderId: patientInfo.responderId, // Keep responder ID
+      incident: '',
+      name: '',
+      age: '',
+      allergies: '',
+      medication: '',
+      history: '',
+      lastIntake: '',
+      signsSymptoms: '',
+      priority: '',
+      pupilsReactive: false
+    },
+    vitals: [],
+    gcs: [],
+    notes: []
+  };
+  
+  currentPatientId = patientId;
+  
+  // Clear all current data
+  patientInfo = {...patients[patientId].info};
+  vitalsLog = [];
+  gcsLog = [];
+  notesLog = [];
+  
+  // Update UI
+  updatePatientInfoFields();
+  renderVitalsLog();
+  renderGcsLog();
+  renderNotesLog();
+  renderPatientList();
+  renderVitalsChart();
+  renderAlertsToTabs();
+  updateCurrentPatientDisplay();
+  updateAllTabPatientDisplays();
+  
+  // Clear audio notes display
+  document.getElementById('audio-notes').innerHTML = '';
+  
+  saveToLocalStorage();
+}
+
+function switchPatient(patientId) {
+  if (!patients[patientId]) return;
+  
+  // Save current patient if exists
+  if (currentPatientId) {
+    patients[currentPatientId] = {
+      info: {...patientInfo},
+      vitals: [...vitalsLog],
+      gcs: [...gcsLog],
+      notes: [...notesLog]
+    };
+  }
+  
+  currentPatientId = patientId;
+  patientInfo = {...patients[patientId].info};
+  vitalsLog = [...patients[patientId].vitals];
+  gcsLog = [...patients[patientId].gcs];
+  notesLog = [...patients[patientId].notes];
+  
+  // Update UI
+  renderVitalsLog();
+  renderGcsLog();
+  renderNotesLog();
+  renderPatientList();
+  updatePatientInfoFields();
+  renderVitalsChart();
+  renderAlertsToTabs();
+  updateCurrentPatientDisplay();
+  updateAllTabPatientDisplays();
+  
+  // Clear audio notes display
+  document.getElementById('audio-notes').innerHTML = '';
+  
+  saveToLocalStorage();
+}
+
+function removePatient(patientId) {
+  if (!confirm('Remove this patient and all their data?')) return;
+  
+  delete patients[patientId];
+  
+  if (currentPatientId === patientId) {
+    // Switch to another patient or create new one
+    const remainingIds = Object.keys(patients);
+    if (remainingIds.length > 0) {
+      switchPatient(remainingIds[0]);
+    } else {
+      addPatient();
+    }
+  }
+  
+  saveToLocalStorage();
+  renderPatientList();
+  updateCurrentPatientDisplay();
+  updateAllTabPatientDisplays();
+}
+
+function renderPatientList() {
+  const patientListEl = document.getElementById('patient-list');
+  patientListEl.innerHTML = '';
+  
+  // Only show patients with names
+  const namedPatients = Object.keys(patients).filter(id => 
+    patients[id].info.name && patients[id].info.name.trim() !== ''
+  );
+  
+  if (namedPatients.length === 0) {
+    patientListEl.innerHTML = '<div class="meta">No named patients yet</div>';
+    return;
+  }
+  
+  namedPatients.forEach(id => {
+    const patient = patients[id];
+    const displayName = patient.info.name;
+    const priority = patient.info.priority;
+    
+    const chip = document.createElement('div');
+    chip.className = `patient-chip ${id === currentPatientId ? 'active' : ''}`;
+    
+    let priorityIndicator = '';
+    if (priority) {
+      priorityIndicator = `<span class="priority-indicator priority-${priority.toLowerCase()}">${priority}</span>`;
+    }
+    
+    chip.innerHTML = `
+      ${displayName}
+      ${priorityIndicator}
+      <span class="remove" onclick="event.stopPropagation(); removePatient('${id}')">×</span>
+    `;
+    chip.onclick = () => {
+      switchPatient(id);
+    };
+    
+    patientListEl.appendChild(chip);
+  });
+}
+
+function updateCurrentPatientDisplay() {
+  const displayEl = document.getElementById('current-patient-display');
+  if (patientInfo.name && patientInfo.name.trim() !== '') {
+    displayEl.textContent = patientInfo.name;
+  } else {
+    displayEl.textContent = 'New Patient';
+  }
+}
+
+// New function to update patient display in all tabs
+function updateAllTabPatientDisplays() {
+  const patientName = patientInfo.name && patientInfo.name.trim() !== '' ? patientInfo.name : 'New Patient';
+  
+  // Update all tab patient displays
+  document.getElementById('patient-info-current').textContent = patientName;
+  document.getElementById('vitals-current').textContent = patientName;
+  document.getElementById('gcs-current').textContent = patientName;
+  document.getElementById('notes-current').textContent = patientName;
+}
+
+function updatePatientInfoFields() {
+  document.getElementById('responder-id').value = patientInfo.responderId;
+  document.getElementById('incident-type').value = patientInfo.incident;
+  document.getElementById('patient-name').value = patientInfo.name;
+  document.getElementById('patient-age').value = patientInfo.age;
+  document.getElementById('allergies').value = patientInfo.allergies;
+  document.getElementById('medication').value = patientInfo.medication;
+  document.getElementById('history').value = patientInfo.history;
+  document.getElementById('last-intake').value = patientInfo.lastIntake;
+  document.getElementById('signs-symptoms').value = patientInfo.signsSymptoms || '';
+  document.getElementById('patient-priority').value = patientInfo.priority || '';
+  document.getElementById('pupils-reactive').checked = patientInfo.pupilsReactive || false;
+}
+
+// New function to handle patient info changes
+function patientInfoChanged() {
+  // Update patientInfo object with current form values
+  patientInfo.responderId = document.getElementById('responder-id').value.trim();
+  patientInfo.incident = document.getElementById('incident-type').value;
+  patientInfo.age = document.getElementById('patient-age').value.trim();
+  patientInfo.allergies = document.getElementById('allergies').value.trim();
+  patientInfo.medication = document.getElementById('medication').value.trim();
+  patientInfo.history = document.getElementById('history').value.trim();
+  patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
+  patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
+  patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+  
+  // Save current patient data
+  if (currentPatientId) {
+    patients[currentPatientId] = {
+      info: {...patientInfo},
+      vitals: [...vitalsLog],
+      gcs: [...gcsLog],
+      notes: [...notesLog]
+    };
+    
+    saveToLocalStorage();
+  }
+}
+
+// Function to handle patient name changes (special handling for patient list)
+function patientNameChanged() {
+  const newName = document.getElementById('patient-name').value.trim();
+  const oldName = patientInfo.name;
+  
+  // Update patientInfo object with current form values
+  patientInfo.responderId = document.getElementById('responder-id').value.trim();
+  patientInfo.incident = document.getElementById('incident-type').value;
+  patientInfo.name = newName;
+  patientInfo.age = document.getElementById('patient-age').value.trim();
+  patientInfo.allergies = document.getElementById('allergies').value.trim();
+  patientInfo.medication = document.getElementById('medication').value.trim();
+  patientInfo.history = document.getElementById('history').value.trim();
+  patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
+  patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
+  patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+  
+  // Save current patient data
+  if (currentPatientId) {
+    patients[currentPatientId] = {
+      info: {...patientInfo},
+      vitals: [...vitalsLog],
+      gcs: [...gcsLog],
+      notes: [...notesLog]
+    };
+    
+    saveToLocalStorage();
+    renderPatientList();
+    updateCurrentPatientDisplay();
+    updateAllTabPatientDisplays();
+  }
+}
+
+// Function to handle patient priority changes
+function patientPriorityChanged() {
+  const newPriority = document.getElementById('patient-priority').value;
+  
+  // Update patientInfo object
+  patientInfo.priority = newPriority;
+  
+  // Save current patient data
+  if (currentPatientId) {
+    patients[currentPatientId] = {
+      info: {...patientInfo},
+      vitals: [...vitalsLog],
+      gcs: [...gcsLog],
+      notes: [...notesLog]
+    };
+    
+    saveToLocalStorage();
+    renderPatientList();
+  }
+}
+
+// Function to start a new scene
+function startNewScene() {
+  if (!confirm('Start a new scene? This will remove all patients and their data.')) return;
+  
+  // Clear all data
+  patients = {};
+  currentPatientId = null;
+  patientInfo = {
+    responderId: '',
+    incident: '',
+    name: '',
+    age: '',
+    allergies: '',
+    medication: '',
+    history: '',
+    lastIntake: '',
+    signsSymptoms: '',
+    priority: '',
+    pupilsReactive: false
+  };
+  vitalsLog = [];
+  gcsLog = [];
+  notesLog = [];
+  
+  // Create a new patient
+  addPatient();
+  
+  // Clear all UI elements
+  document.getElementById('results-output').value = '';
+  document.getElementById('audio-notes').innerHTML = '';
+  
+  // Update UI
+  renderVitalsLog();
+  renderGcsLog();
+  renderNotesLog();
+  renderPatientList();
+  renderVitalsChart();
+  renderAlertsToTabs();
+  updateCurrentPatientDisplay();
+  updateAllTabPatientDisplays();
+  
+  saveToLocalStorage();
+}
+
+/* -------------------------
+   VITAL ASSESSMENT FUNCTIONS
+   ------------------------- */
+function assessVital(value, vitalType) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return 'normal';
+  
+  switch(vitalType) {
+    case 'bp-sys':
+      if (num < 90 || num > 200) return 'critical';
+      if (num >= 90 && num <= 100) return 'abnormal';
+      if (num >= 160 && num <= 200) return 'abnormal';
+      return 'normal';
+      
+    case 'bp-dia':
+      if (num < 60 || num > 120) return 'critical';
+      if (num >= 60 && num <= 70) return 'abnormal';
+      if (num >= 100 && num <= 120) return 'abnormal';
+      return 'normal';
+      
+    case 'pulse':
+      if (num < 40 || num > 130) return 'critical';
+      if (num >= 40 && num <= 50) return 'abnormal';
+      if (num >= 100 && num <= 130) return 'abnormal';
+      return 'normal';
+      
+    case 'spo2':
+      if (num < 90) return 'critical';
+      if (num >= 90 && num <= 94) return 'abnormal';
+      return 'normal';
+      
+    case 'rrate':
+      if (num < 8 || num > 30) return 'critical';
+      if (num >= 8 && num <= 12) return 'abnormal';
+      if (num >= 25 && num <= 30) return 'abnormal';
+      return 'normal';
+      
+    case 'hgt':
+      if (num < 2.5 || num > 20) return 'critical';
+      if (num >= 2.5 && num <= 4) return 'abnormal';
+      if (num >= 15 && num <= 20) return 'abnormal';
+      return 'normal';
+      
+    case 'temp':
+      if (num < 35 || num > 39) return 'critical';
+      if (num >= 35 && num <= 36) return 'abnormal';
+      if (num >= 38 && num <= 39) return 'abnormal';
+      return 'normal';
+      
+    case 'cap-refill':
+      if (num > 3) return 'critical';
+      if (num >= 2 && num <= 3) return 'abnormal';
+      return 'normal';
+      
+    case 'pain':
+      if (num >= 8) return 'critical';
+      if (num >= 5 && num <= 7) return 'abnormal';
+      return 'normal';
+      
+    default:
+      return 'normal';
+  }
+}
+
+function updateVitalIndicator(input, vitalType) {
+  // Remove all existing classes
+  input.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
+  
+  const assessment = assessVital(input.value, vitalType);
+  if (input.value && input.value !== '') {
+    input.classList.add(`vital-${assessment}`);
+  }
+}
+
+function getVitalClass(value, vitalType) {
+  const assessment = assessVital(value, vitalType);
+  return `vital-value-${assessment}`;
+}
+
+/* Vital Info Modal Functions */
+function showVitalInfo(vitalType) {
+  const modal = document.getElementById('vital-info-modal');
+  const title = document.getElementById('vital-info-title');
+  const content = document.getElementById('vital-info-content');
+  
+  // Define vital information
+  const vitalInfo = {
+    'bp': {
+      title: 'Blood Pressure',
+      description: 'Blood pressure is the force of blood pushing against the walls of the arteries as the heart pumps blood.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Systolic (mmHg)</th>
+            <th>Diastolic (mmHg)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">101-159</td>
+            <td class="range-normal">71-99</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">90-100 or 160-200</td>
+            <td class="range-abnormal">60-70 or 100-120</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;90 or &gt;200</td>
+            <td class="range-critical">&lt;60 or &gt;120</td>
+          </tr>
+        </table>
+      `
+    },
+    'pulse': {
+      title: 'Pulse',
+      description: 'Pulse is the rate at which the heart beats, measured in beats per minute (bpm).',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (bpm)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">51-99</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">40-50 or 100-130</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;40 or &gt;130</td>
+          </tr>
+        </table>
+      `
+    },
+    'spo2': {
+      title: 'SPO₂ (Oxygen Saturation)',
+      description: 'SPO₂ measures the percentage of hemoglobin in the blood that is saturated with oxygen.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (%)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">95-100</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">90-94</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;90</td>
+          </tr>
+        </table>
+      `
+    },
+    'o2': {
+      title: 'O₂ Delivery',
+      description: 'Different methods of delivering supplemental oxygen to patients who require it.',
+      ranges: `
+        <p><strong>Nasal Cannula:</strong> 1-6 L/min, provides 24-44% oxygen</p>
+        <p><strong>Face Mask:</strong> 5-10 L/min, provides 40-60% oxygen</p>
+        <p><strong>Non-rebreather Mask:</strong> 10-15 L/min, provides 60-80% oxygen</p>
+        <p><strong>Bag-Valve Mask:</strong> 15 L/min, provides 90-100% oxygen</p>
+      `
+    },
+    'o2-flow': {
+      title: 'O₂ Flow Rate',
+      description: 'The rate at which oxygen is delivered, measured in liters per minute (L/min).',
+      ranges: `
+        <p>Flow rates vary based on delivery method:</p>
+        <p><strong>Nasal Cannula:</strong> 1-6 L/min</p>
+        <p><strong>Face Mask:</strong> 5-10 L/min</p>
+        <p><strong>Non-rebreather Mask:</strong> 10-15 L/min</p>
+        <p><strong>Bag-Valve Mask:</strong> 15 L/min</p>
+      `
+    },
+    'rrate': {
+      title: 'Respiratory Rate',
+      description: 'The number of breaths taken per minute.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (breaths/min)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">13-24</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">8-12 or 25-30</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;8 or &gt;30</td>
+          </tr>
+        </table>
+      `
+    },
+    'hgt': {
+      title: 'Blood Glucose (HGT)',
+      description: 'The concentration of glucose in the blood, measured in millimoles per liter (mmol/L).',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (mmol/L)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">4.1-14.9</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">2.5-4 or 15-20</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;2.5 or &gt;20</td>
+          </tr>
+        </table>
+      `
+    },
+    'temp': {
+      title: 'Temperature',
+      description: 'The measure of body heat, measured in degrees Celsius (°C).',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (°C)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">36.1-37.9</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">35-36 or 38-39</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&lt;35 or &gt;39</td>
+          </tr>
+        </table>
+      `
+    },
+    'cap-refill': {
+      title: 'Capillary Refill',
+      description: 'The time it takes for color to return to an external capillary bed after pressure is applied.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (seconds)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">&lt;2</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">2-3</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">&gt;3</td>
+          </tr>
+        </table>
+      `
+    },
+    'pupils': {
+      title: 'Pupils',
+      description: 'The pupils are the black circular opening in the center of the eye that allows light to enter.',
+      ranges: `
+        <p><strong>Normal:</strong> 3-5 mm in diameter, equal in size, reactive to light</p>
+        <p><strong>Abnormal:</strong> Unequal size, sluggish reaction, or unusual size</p>
+        <p><strong>Blown pupils:</strong> Dilated pupils (>7 mm) that don't react to light</p>
+        <p><strong>Pinpoint pupils:</strong> Very small pupils (<2 mm) often associated with opioid use</p>
+      `
+    },
+    'pain': {
+      title: 'Pain Score',
+      description: 'A subjective measure of pain intensity, typically rated on a scale of 0-10.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Category</th>
+            <th>Range (0-10)</th>
+          </tr>
+          <tr>
+            <td class="range-normal">Normal</td>
+            <td class="range-normal">0-4</td>
+          </tr>
+          <tr>
+            <td class="range-abnormal">Abnormal</td>
+            <td class="range-abnormal">5-7</td>
+          </tr>
+          <tr>
+            <td class="range-critical">Critical</td>
+            <td class="range-critical">8-10</td>
+          </tr>
+        </table>
+      `
+    },
+    'ecg': {
+      title: 'ECG Rhythm',
+      description: 'The electrical activity of the heart as recorded by an electrocardiogram.',
+      ranges: `
+        <p><strong>Sinus:</strong> Normal heart rhythm</p>
+        <p><strong>Sinus Tachycardia:</strong> Fast heart rate (>100 bpm) with normal rhythm</p>
+        <p><strong>Sinus Bradycardia:</strong> Slow heart rate (<60 bpm) with normal rhythm</p>
+        <p><strong>Atrial Fibrillation:</strong> Irregular and often rapid heart rhythm</p>
+        <p><strong>Ventricular Tachycardia:</strong> Fast, regular rhythm originating in ventricles</p>
+        <p><strong>Ventricular Fibrillation:</strong> Disorganized electrical activity, life-threatening</p>
+        <p><strong>Asystole:</strong> Flatline, no electrical activity in the heart</p>
+      `
+    },
+    'pain-location': {
+      title: 'Pain Location',
+      description: 'The specific area of the body where pain is experienced.',
+      ranges: `
+        <p>Documenting pain location helps identify potential causes:</p>
+        <p><strong>Chest pain:</strong> May indicate cardiac issues</p>
+        <p><strong>Abdominal pain:</strong> May indicate gastrointestinal or organ issues</p>
+        <p><strong>Head pain:</strong> May indicate neurological issues</p>
+        <p><strong>Extremity pain:</strong> May indicate musculoskeletal injury</p>
+      `
+    },
+    'skin': {
+      title: 'Skin Condition',
+      description: 'The appearance and condition of the skin can indicate various medical states.',
+      ranges: `
+        <p><strong>Normal:</strong> Pink, warm, dry skin</p>
+        <p><strong>Pale:</strong> May indicate shock, anemia, or poor circulation</p>
+        <p><strong>Cyanotic:</strong> Bluish discoloration indicating poor oxygenation</p>
+        <p><strong>Flushed:</strong> Reddened skin, may indicate fever or hypertension</p>
+        <p><strong>Mottled:</strong> Patchy discoloration indicating poor circulation</p>
+        <p><strong>Diaphoretic:</strong> Sweaty skin, may indicate pain, shock, or cardiac issues</p>
+      `
+    },
+    // GCS information
+    'gcs-eye': {
+      title: 'GCS Eye Opening Response',
+      description: 'The eye opening response assesses the arousal mechanism of the patient.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Response</th>
+            <th>Score</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Spontaneous</td>
+            <td>4</td>
+            <td>Eyes open spontaneously without any stimulus</td>
+          </tr>
+          <tr>
+            <td>To Speech</td>
+            <td>3</td>
+            <td>Eyes open in response to verbal stimulus</td>
+          </tr>
+          <tr>
+            <td>To Pain</td>
+            <td>2</td>
+            <td>Eyes open in response to painful stimulus</td>
+          </tr>
+          <tr>
+            <td>No Response</td>
+            <td>1</td>
+            <td>Eyes remain closed despite stimuli</td>
+          </tr>
+        </table>
+        <p><strong>Testing tips:</strong> Call the patient's name first. If no response, use a louder verbal command. If still no response, apply a peripheral painful stimulus.</p>
+      `
+    },
+    'gcs-verbal': {
+      title: 'GCS Verbal Response',
+      description: 'The verbal response assesses the content and clarity of the patient\'s speech.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Response</th>
+            <th>Score</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Orientated</td>
+            <td>5</td>
+            <td>Patient can answer questions about person, place, time, and event</td>
+          </tr>
+          <tr>
+            <td>Confused</td>
+            <td>4</td>
+            <td>Patient responds to questions but answers are confused or disoriented</td>
+          </tr>
+          <tr>
+            <td>Inappropriate Words</td>
+            <td>3</td>
+            <td>Random or exclamatory speech, but able to form words</td>
+          </tr>
+          <tr>
+            <td>Incomprehensible Sounds</td>
+            <td>2</td>
+            <td>Moaning or groaning without recognizable words</td>
+          </tr>
+          <tr>
+            <td>No Response</td>
+            <td>1</td>
+            <td>No verbal response despite stimuli</td>
+          </tr>
+        </table>
+        <p><strong>Testing tips:</strong> Ask orientation questions like "What is your name?", "Where are you?", "What month is it?". If patient is intubated or has other barriers to speech, note this in your assessment.</p>
+      `
+    },
+    'gcs-motor': {
+      title: 'GCS Motor Response',
+      description: 'The motor response assesses the patient\'s ability to move extremities on command or in response to stimuli.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Response</th>
+            <th>Score</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Obeys Commands</td>
+            <td>6</td>
+            <td>Patient can perform simple motor tasks on command</td>
+          </tr>
+          <tr>
+            <td>Localises to Pain</td>
+            <td>5</td>
+            <td>Patient attempts to remove source of painful stimulus</td>
+          </tr>
+          <tr>
+            <td>Withdraws from Pain</td>
+            <td>4</td>
+            <td>Patient pulls away from painful stimulus</td>
+          </tr>
+          <tr>
+            <td>Flexion to Pain (decorticate)</td>
+            <td>3</td>
+            <td>Abnormal flexion - arms flexed toward chest, wrists and fingers flexed</td>
+          </tr>
+          <tr>
+            <td>Extension to Pain (decerebrate)</td>
+            <td>2</td>
+            <td>Abnormal extension - arms extended and internally rotated</td>
+          </tr>
+          <tr>
+            <td>No Response</td>
+            <td>1</td>
+            <td>No motor response despite stimuli</td>
+          </tr>
+        </table>
+        <p><strong>Testing tips:</strong> Start with simple commands like "squeeze my hand" or "stick out your tongue". If no response, apply a standardized painful stimulus to a peripheral site and observe the response.</p>
+      `
+    },
+    'gcs-total': {
+      title: 'GCS Total Score Interpretation',
+      description: 'The Glasgow Coma Scale total score provides an overall assessment of the patient\'s level of consciousness.',
+      ranges: `
+        <table class="vital-range-table">
+          <tr>
+            <th>Total Score</th>
+            <th>Severity</th>
+            <th>Implications</th>
+          </tr>
+          <tr>
+            <td>13-15</td>
+            <td class="range-normal">Mild</td>
+            <td>Minor brain injury, patient is alert and oriented</td>
+          </tr>
+          <tr>
+            <td>9-12</td>
+            <td class="range-abnormal">Moderate</td>
+            <td>Moderate brain injury, patient may be confused or drowsy</td>
+          </tr>
+          <tr>
+            <td>3-8</td>
+            <td class="range-critical">Severe</td>
+            <td>Severe brain injury, patient is in a coma</td>
+          </tr>
+        </table>
+        <p><strong>Clinical significance:</strong></p>
+        <ul>
+          <li>Score of 8 or less typically indicates the need for airway protection</li>
+          <li>Score of 3 indicates deep coma or brain death</li>
+          <li>Serial GCS assessments help track neurological status over time</li>
+          <li>Special considerations for pediatric patients and those with pre-existing conditions</li>
+        </ul>
+      `
+    }
+  };
+  
+  // Set modal content based on vital type
+  if (vitalInfo[vitalType]) {
+    title.textContent = vitalInfo[vitalType].title;
+    content.innerHTML = `
+      <p>${vitalInfo[vitalType].description}</p>
+      ${vitalInfo[vitalType].ranges}
+    `;
+  } else {
+    title.textContent = 'Vital Information';
+    content.innerHTML = '<p>Information not available.</p>';
+  }
+  
+  // Display modal
+  modal.style.display = 'block';
+}
+
+function closeVitalInfo() {
+  document.getElementById('vital-info-modal').style.display = 'none';
+}
+
+/* Results Modal Functions */
+function showResults() {
+  document.getElementById('results-modal').style.display = 'block';
+  // Generate results automatically when opening
+  generateResults();
+}
+
+function closeResults() {
+  document.getElementById('results-modal').style.display = 'none';
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+  const vitalModal = document.getElementById('vital-info-modal');
+  const resultsModal = document.getElementById('results-modal');
+  
+  if (event.target == vitalModal) {
+    vitalModal.style.display = 'none';
+  }
+  if (event.target == resultsModal) {
+    resultsModal.style.display = 'none';
+  }
+}
+
+/* Trend detection rules:
+   We'll detect trends comparing latest two entries (if available).
+   - BP systolic drop: moderate >=20 (amber), severe >=30 (red)
+   - Pulse increase: moderate >=20 (amber), severe >=30 (red)
+   - SPO2 drop: moderate >=4 (amber), severe >=8 (red)
+   - GCS drop: moderate >=2 (amber), severe >=3 (red)
+   Also absolute thresholds: systolic <90 red, spo2 <90 red, hr >130 red, gcs <=8 red
+*/
+function analyzeTrends() {
+  const issues = [];
+  // Vitals trend checks
+  if (vitalsLog.length >= 2) {
+    const newest = vitalsLog[0];
+    const prev = vitalsLog[1];
+
+    // BP systolic
+    if (newest.bpSys && prev.bpSys) {
+      const diffSys = Number(prev.bpSys) - Number(newest.bpSys); // drop is positive
+      if (diffSys >= 30) issues.push({severity:'red', text:`Systolic BP dropped by ${diffSys} mmHg`});
+      else if (diffSys >= 20) issues.push({severity:'amber', text:`Systolic BP dropped by ${diffSys} mmHg`});
+    }
+    // Pulse increase
+    if (newest.pulse && prev.pulse) {
+      const diffPulse = Number(newest.pulse) - Number(prev.pulse);
+      if (diffPulse >= 30) issues.push({severity:'red', text:`Pulse increased by ${diffPulse} bpm`});
+      else if (diffPulse >= 20) issues.push({severity:'amber', text:`Pulse increased by ${diffPulse} bpm`});
+    }
+    // SPO2 drop
+    if (newest.spo2 && prev.spo2) {
+      const diffSp = Number(prev.spo2) - Number(newest.spo2);
+      if (diffSp >= 8) issues.push({severity:'red', text:`SPO₂ dropped by ${diffSp}%`});
+      else if (diffSp >= 4) issues.push({severity:'amber', text:`SPO₂ dropped by ${diffSp}%`});
+    }
+  }
+
+  // Absolute thresholds check against newest
+  if (vitalsLog.length >= 1) {
+    const latest = vitalsLog[0];
+    if (latest.bpSys && Number(latest.bpSys) < 90) issues.push({severity:'red', text:'Systolic BP < 90 mmHg'});
+    if (latest.spo2 && Number(latest.spo2) < 90) issues.push({severity:'red', text:'SPO₂ < 90%'});
+    if (latest.pulse && Number(latest.pulse) > 130) issues.push({severity:'red', text:'Pulse > 130 bpm'});
+  }
+
+  // GCS trends
+  if (gcsLog.length >= 2) {
+    const n = gcsLog[0].total;
+    const p = gcsLog[1].total;
+    const diff = Number(p) - Number(n); // drop positive
+    if (diff >= 3) issues.push({severity:'red', text:`GCS dropped by ${diff}`});
+    else if (diff >= 2) issues.push({severity:'amber', text:`GCS dropped by ${diff}`});
+  }
+  if (gcsLog.length >=1) {
+    const latestG = gcsLog[0].total;
+    if (latestG <= 8) issues.push({severity:'red', text:`GCS <= 8 (current ${latestG})`});
+  }
+
+  // Decide highest severity to display banner
+  let severity = null;
+  for (const it of issues) {
+    if (it.severity === 'red') { severity = 'red'; break; }
+    if (it.severity === 'amber' && severity !== 'red') severity = 'amber';
+  }
+  return {issues, severity};
+}
+
+/* -------------------------
+   UI helpers: logs + alerts
+   ------------------------- */
+function renderVitalsLog() {
+  const el = document.getElementById('vitals-log');
+  el.innerHTML = '';
+  if (vitalsLog.length === 0) { el.innerHTML = '<div class="log-item meta">No vitals recorded yet</div>'; return; }
+  vitalsLog.forEach(item => {
+    const lines = [];
+    if (item.bpSys && item.bpDia) {
+      const sysClass = getVitalClass(item.bpSys, 'bp-sys');
+      const diaClass = getVitalClass(item.bpDia, 'bp-dia');
+      lines.push(`BP: <span class="${sysClass}">${item.bpSys}</span>/<span class="${diaClass}">${item.bpDia}</span> mmHg`);
+    }
+    if (item.pulse) {
+      const pulseClass = getVitalClass(item.pulse, 'pulse');
+      lines.push(`Pulse: <span class="${pulseClass}">${item.pulse}</span> bpm`);
+    }
+    if (item.spo2) {
+      const spo2Class = getVitalClass(item.spo2, 'spo2');
+      let s = `SPO₂: <span class="${spo2Class}">${item.spo2}</span>%`;
+      if (item.o2Delivery) s += ` (${item.o2Delivery})`;
+      lines.push(s);
+    }
+    if (item.rrate) {
+      const rrClass = getVitalClass(item.rrate, 'rrate');
+      lines.push(`Resp Rate: <span class="${rrClass}">${item.rrate}</span>/min`);
+    }
+    if (item.temp) {
+      const tempClass = getVitalClass(item.temp, 'temp');
+      lines.push(`Temp: <span class="${tempClass}">${item.temp}</span> °C`);
+    }
+    if (item.capRefill) {
+      const capClass = getVitalClass(item.capRefill, 'cap-refill');
+      lines.push(`Cap Refill: <span class="${capClass}">${item.capRefill}</span> s`);
+    }
+    if (item.pupilLeft || item.pupilRight) {
+      const pupilText = `Pupils: L${item.pupilLeft || ''} R${item.pupilRight || ''}`;
+      if (item.pupilsReactive) {
+        lines.push(`${pupilText} (Reactive)`);
+      } else {
+        lines.push(pupilText);
+      }
+    }
+    if (item.pain) {
+      const painClass = getVitalClass(item.pain, 'pain');
+      lines.push(`Pain: <span class="${painClass}">${item.pain}</span>/10`);
+    }
+    if (item.ecg) lines.push(`ECG: ${item.ecg}`);
+    if (item.painLocation) lines.push(`Pain Location: ${item.painLocation}`);
+    if (item.skin) lines.push(`Skin: ${item.skin}`);
+
+    const div = document.createElement('div');
+    div.className = 'log-item';
+    div.innerHTML = `<div><strong>${item.time}</strong> — ${lines.join(' • ')}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderGcsLog() {
+  const el = document.getElementById('gcs-log');
+  el.innerHTML = '';
+  if (gcsLog.length === 0) { el.innerHTML = '<div class="log-item meta">No GCS recorded yet</div>'; return; }
+  gcsLog.forEach(item=>{
+    const gcsClass = item.total <= 8 ? 'vital-value-critical' : 
+                    item.total <= 12 ? 'vital-value-abnormal' : 'vital-value-normal';
+    const div = document.createElement('div');
+    div.className='log-item';
+    div.innerHTML = `<div><strong>${item.time}</strong> — Total: <span class="${gcsClass}">${item.total}</span>/15 (E${item.eye} V${item.verbal} M${item.motor})</div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderNotesLog() {
+  const el = document.getElementById('notes-log');
+  el.innerHTML = '';
+  if (notesLog.length === 0) { el.innerHTML = '<div class="log-item meta">No notes added</div>'; return; }
+  notesLog.forEach(n=>{
+    const div = document.createElement('div');
+    div.className='log-item';
+    div.innerHTML = `<div><strong>${n.time}</strong> — ${n.note}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderVitalsChart() {
+  const container = document.getElementById('vitals-chart-container');
+  container.innerHTML = '';
+  
+  if (vitalsLog.length < 2) return;
+  
+  // Create BP trend chart
+  const chartContainer = document.createElement('div');
+  chartContainer.className = 'vitals-chart';
+  
+  const chartTitle = document.createElement('div');
+  chartTitle.className = 'chart-title';
+  chartTitle.textContent = 'BP Trend (Systolic)';
+  container.appendChild(chartTitle);
+  
+  const maxBP = Math.max(...vitalsLog.map(v => parseInt(v.bpSys) || 0));
+  const minBP = Math.min(...vitalsLog.map(v => parseInt(v.bpSys) || 0));
+  
+  // Show last 5 readings
+  vitalsLog.slice(0, 5).reverse().forEach((v, i) => {
+    const height = maxBP > minBP ? 
+      `${((parseInt(v.bpSys) - minBP) / (maxBP - minBP)) * 100}%` : '50%';
+    
+    const bar = document.createElement('div');
+    bar.className = 'chart-bar';
+    bar.style.height = height;
+    bar.title = `${v.time}: ${v.bpSys}/${v.bpDia}`;
+    chartContainer.appendChild(bar);
+  });
+  
+  container.appendChild(chartContainer);
+}
+
+function renderAlertsToTabs() {
+  const res = analyzeTrends();
+  const severity = res.severity;
+
+  const vitalsBanner = document.getElementById('vitals-alert');
+  const gcsBanner = document.getElementById('gcs-alert');
+  const resultsBanner = document.getElementById('results-alert');
+
+  // Clear
+  [vitalsBanner,gcsBanner,resultsBanner].forEach(b=>{ b.className='alert-banner alert-none'; b.textContent=''; });
+
+  if (!severity) return; // no banner
+
+  const message = res.issues.map(i=>i.text).slice(0,3).join(' • '); // top items
+  const className = (severity === 'red') ? 'alert-banner alert-red' : 'alert-banner alert-amber';
+  [vitalsBanner,gcsBanner,resultsBanner].forEach(b=>{
+    b.className = className;
+    b.textContent = `⚠️ Possible deterioration — ${message}`;
+  });
+}
+
+/* -------------------------
+   Submit/clear functions
+   ------------------------- */
+function submitVitals() {
+  // pull patient info (keep patientInfo up to date)
+  patientInfo.responderId = document.getElementById('responder-id').value.trim();
+  patientInfo.incident = document.getElementById('incident-type').value;
+  patientInfo.name = document.getElementById('patient-name').value.trim();
+  patientInfo.age = document.getElementById('patient-age').value.trim();
+  patientInfo.allergies = document.getElementById('allergies').value.trim();
+  patientInfo.medication = document.getElementById('medication').value.trim();
+  patientInfo.history = document.getElementById('history').value.trim();
+  patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
+  patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
+  patientInfo.priority = document.getElementById('patient-priority').value;
+  patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+
+  const item = {
+    time: nowTimestamp(),
+    iso: formatDateTimeISO(),
+    bpSys: document.getElementById('bp-sys').value.trim(),
+    bpDia: document.getElementById('bp-dia').value.trim(),
+    pulse: document.getElementById('pulse').value.trim(),
+    spo2: document.getElementById('spo2').value.trim(),
+    o2Delivery: document.getElementById('o2-delivery').value,
+    o2Flow: document.getElementById('o2-flow').value.trim(),
+    rrate: document.getElementById('rrate').value.trim(),
+    hgt: document.getElementById('hgt').value.trim(),
+    temp: document.getElementById('temp').value.trim(),
+    capRefill: document.getElementById('cap-refill').value.trim(),
+    pupilLeft: document.getElementById('pupil-left').value.trim(),
+    pupilRight: document.getElementById('pupil-right').value.trim(),
+    pain: document.getElementById('pain').value.trim(),
+    ecg: document.getElementById('ecg').value,
+    painLocation: document.getElementById('pain-location').value.trim(),
+    skin: document.getElementById('skin').value,
+    pupilsReactive: document.getElementById('pupils-reactive').checked
+  };
+
+  // Prepend newest
+  vitalsLog.unshift(item);
+  // Keep only reasonable history length (optional) - here keep last 100
+  if (vitalsLog.length > 200) vitalsLog.length = 200;
+
+  saveToLocalStorage();
+  renderVitalsLog();
+  renderVitalsChart();
+  renderAlertsToTabs();
+  renderPatientList();
+
+  // Clear vitals inputs to allow new reading
+  clearVitalsInputs();
+}
+
+function clearVitalsInputs() {
+  ['bp-sys','bp-dia','pulse','spo2','o2-delivery','o2-flow','rrate','hgt','temp','cap-refill','pupil-left','pupil-right','pain','ecg','pain-location','skin'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.type === 'checkbox') el.checked = false;
+    else el.value = '';
+    // Remove color classes
+    el.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
+  });
+}
+
+function submitGCS() {
+  // calculate scores (read selected radio values)
+  const eye = parseInt(document.querySelector('input[name="gcs-eye"]:checked')?.value || 0);
+  const verbal = parseInt(document.querySelector('input[name="gcs-verbal"]:checked')?.value || 0);
+  const motor = parseInt(document.querySelector('input[name="gcs-motor"]:checked')?.value || 0);
+  const total = (eye||0) + (verbal||0) + (motor||0);
+  const item = { time: nowTimestamp(), iso: formatDateTimeISO(), eye, verbal, motor, total };
+  gcsLog.unshift(item);
+  if (gcsLog.length > 200) gcsLog.length = 200;
+
+  document.getElementById('gcs-total').innerText = `Total GCS Score: ${total} / 15 (E${eye} V${verbal} M${motor})`;
+  saveToLocalStorage();
+  renderGcsLog();
+  renderAlertsToTabs();
+  renderPatientList();
+
+  // Clear selection to allow new reading
+  clearGCSInputs();
+}
+
+function clearGCSInputs() {
+  ['gcs-eye','gcs-verbal','gcs-motor'].forEach(name=>{
+    document.querySelectorAll(`input[name="${name}"]`).forEach(i=>i.checked=false);
+  });
+  document.getElementById('gcs-total').innerText = 'Total GCS Score: 0 / 15';
+}
+
+function addNote() {
+  const text = document.getElementById('general-note').value.trim();
+  if (!text) { alert('Add a note before hitting Add Note'); return; }
+  notesLog.unshift({ time: nowTimestamp(), iso: formatDateTimeISO(), note: text });
+  if (notesLog.length > 200) notesLog.length = 200;
+  saveToLocalStorage();
+  renderNotesLog();
+  document.getElementById('general-note').value = '';
+  renderPatientList();
+}
+
+/* -------------------------
+   Report generation
+   ------------------------- */
+function generateResults() {
+  // Ensure patient info up to date
+  patientInfo.responderId = document.getElementById('responder-id').value.trim();
+  patientInfo.incident = document.getElementById('incident-type').value;
+  patientInfo.name = document.getElementById('patient-name').value.trim();
+  patientInfo.age = document.getElementById('patient-age').value.trim();
+  patientInfo.allergies = document.getElementById('allergies').value.trim();
+  patientInfo.medication = document.getElementById('medication').value.trim();
+  patientInfo.history = document.getElementById('history').value.trim();
+  patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
+  patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
+  patientInfo.priority = document.getElementById('patient-priority').value;
+  patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+
+  // Update alerts in case user viewed Results
+  renderAlertsToTabs();
+
+  const showTS = document.getElementById('show-timestamps').checked;
+  const useSbarFormat = document.getElementById('sbar-format').checked;
+  
+  let report = '';
+  
+  if (useSbarFormat) {
+    report = `--- SBAR HANDOVER REPORT ---\n\n`;
+    
+    report += `SITUATION:\n`;
+    report += `${patientInfo.name || 'Unknown'}, ${patientInfo.age || 'Unknown'}y/o, ${patientInfo.incident || 'Unknown incident'}\n`;
+    if (patientInfo.priority) {
+      const priorityDesc = {
+        'P1': 'Immediate (Critical/Urgent)',
+        'P2': 'Urgent (Serious)',
+        'P3': 'Delayed (Walking Wounded)',
+        'P4': 'Deceased'
+      };
+      report += `Priority: ${patientInfo.priority} - ${priorityDesc[patientInfo.priority]}\n`;
+    }
+    report += `Responder: ${patientInfo.responderId || 'Unknown'}\n\n`;
+    
+    report += `BACKGROUND:\n`;
+    report += `Allergies: ${patientInfo.allergies || 'None known'}\n`;
+    report += `Medications: ${patientInfo.medication || 'None'}\n`;
+    report += `History: ${patientInfo.history || 'None'}\n\n`;
+    
+    report += `ASSESSMENT:\n`;
+    // Add vitals summary
+    if (vitalsLog.length > 0) {
+      const latest = vitalsLog[0];
+      report += `Latest vitals (${latest.time}):\n`;
+      if (latest.bpSys && latest.bpDia) report += `- BP: ${latest.bpSys}/${latest.bpDia} mmHg\n`;
+      if (latest.pulse) report += `- Pulse: ${latest.pulse} bpm\n`;
+      if (latest.spo2) report += `- SPO2: ${latest.spo2}%\n`;
+      if (latest.rrate) report += `- RR: ${latest.rrate}/min\n`;
+      if (latest.temp) report += `- Temp: ${latest.temp}°C\n`;
+      if (latest.ecg) report += `- ECG: ${latest.ecg}\n`;
+      if (latest.skin) report += `- Skin: ${latest.skin}\n`;
+      if (latest.o2Delivery) report += `- O2: ${latest.o2Delivery} at ${latest.o2Flow || 'N/A'} L/min\n`;
+    }
+    
+    // Add GCS
+    if (gcsLog.length > 0) {
+      report += `GCS: ${gcsLog[0].total}/15 (E${gcsLog[0].eye} V${gcsLog[0].verbal} M${gcsLog[0].motor})\n`;
+    }
+    
+    // Add alerts
+    const trend = analyzeTrends();
+    if (trend.issues.length) {
+      report += `\nCONCERNS:\n`;
+      trend.issues.forEach(i=>{ report += `- ${i.text}\n`; });
+    }
+    
+    report += `\nRECOMMENDATION:\n`;
+    report += `[Add your recommendation here]\n\n`;
+    
+    // Only include signs/symptoms if there's content
+    if (patientInfo.signsSymptoms) {
+      report += `--- SIGNS / SYMPTOMS ---\n\n`;
+      report += patientInfo.signsSymptoms + '\n\n';
+    }
+    
+    report += `--- ADDITIONAL NOTES ---\n\n`;
+    if (notesLog.length === 0) report += '(none)\n';
+    else {
+      notesLog.forEach(n=>{
+        report += `${n.time} - ${n.note}\n`;
+      });
+    }
+  } else {
+    // Use original format
+    report = `--- PATIENT HANDOVER REPORT ---\n\n`;
+    const addLine = (label, value, unit='') => { if (value && String(value).trim() !== '') report += `${label.padEnd(15)}: ${value}${unit}\n`; };
+
+    addLine('Responder ID', patientInfo.responderId);
+    addLine('Name', patientInfo.name);
+    addLine('Age', patientInfo.age);
+    addLine('Priority', patientInfo.priority);
+    addLine('Incident', patientInfo.incident);
+    addLine('Allergies', patientInfo.allergies);
+    addLine('Medication', patientInfo.medication);
+    addLine('Past History', patientInfo.history);
+    addLine('Last Intake', patientInfo.lastIntake);
+
+    report += `\n--- VITALS ---\n\n`;
+
+    // For each vitals entry, output only fields that exist, keeping structure tidy.
+    // Show newest-first as in your example (we have newest-first in arrays)
+    if (vitalsLog.length === 0) report += 'No vitals recorded\n';
+    else {
+      // Iterate through vitalsLog in insertion order (newest-first)
+      vitalsLog.forEach(v=>{
+        if (v.bpSys && v.bpDia) {
+          report += `BP             : ${v.bpSys}/${v.bpDia} mmHg${ showTS ? ' ' + v.time : '' }\n`;
+        }
+        if (v.pulse) report += `Pulse          : ${v.pulse} bpm${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.spo2) {
+          report += `SPO2           : ${v.spo2}%${ showTS ? ' ' + v.time : '' }\n`;
+        }
+        if (v.rrate) report += `Resp Rate      : ${v.rrate}/min${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.temp) report += `Temperature    : ${v.temp} °C${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.capRefill) report += `Cap Refill     : ${v.capRefill} s${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.pupilLeft || v.pupilRight) {
+          const pupilText = `Pupils         : L${v.pupilLeft || ''} R${v.pupilRight || ''}`;
+          if (v.pupilsReactive) {
+            report += `${pupilText} (Reactive)${ showTS ? ' ' + v.time : '' }\n`;
+          } else {
+            report += `${pupilText}${ showTS ? ' ' + v.time : '' }\n`;
+          }
+        }
+        if (v.pain) report += `Pain           : ${v.pain} /10${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.ecg) report += `ECG            : ${v.ecg}${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.painLocation) report += `Pain Location  : ${v.painLocation}${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.skin) report += `Skin           : ${v.skin}${ showTS ? ' ' + v.time : '' }\n`;
+        if (v.o2Delivery) report += `O2 Delivery    : ${v.o2Delivery} at ${v.o2Flow || 'N/A'} L/min${ showTS ? ' ' + v.time : '' }\n`;
+        // small spacer between entries for readability
+        report += '\n';
+      });
+    }
+
+    report += `\n--- GCS ---\n\n`;
+    if (gcsLog.length === 0) report += 'No GCS recorded\n\n';
+    else {
+      gcsLog.forEach(g=>{
+        report += `Total GCS Score: ${g.total} / 15 (E${g.eye} V${g.verbal} M${g.motor})${ showTS ? ' ' + g.time : '' }\n\n`;
+      });
+    }
+
+    // Only include signs/symptoms if there's content
+    if (patientInfo.signsSymptoms) {
+      report += `--- SIGNS / SYMPTOMS ---\n\n`;
+      report += patientInfo.signsSymptoms + '\n\n';
+    }
+
+    report += `--- ADDITIONAL NOTES ---\n\n`;
+    if (notesLog.length === 0) report += '(none)\n';
+    else {
+      notesLog.forEach(n=>{
+        report += `${ showTS ? n.time + ' - ' : '' }${n.note}\n`;
+      });
+    }
+
+    // Add alerts summary at end if present (so receivers see it in handover too)
+    const trend = analyzeTrends();
+    if (trend.issues.length) {
+      report += `\n--- ALERTS ---\n\n`;
+      trend.issues.forEach(i=>{ report += `${i.text}\n`; });
+    }
+  }
+
+  document.getElementById('results-output').value = report;
+  renderAlertsToTabs();
+}
+
+/* -------------------------
+   Copy / Download helpers
+   ------------------------- */
+function copyResults() {
+  const resultsArea = document.getElementById('results-output');
+  if (!resultsArea.value) { alert('Generate results first'); return; }
+  resultsArea.select();
+  navigator.clipboard.writeText(resultsArea.value).then(()=>alert('Results copied to clipboard!'), ()=>alert('Copy failed'));
+}
+
+function downloadReport() {
+  const txt = document.getElementById('results-output').value;
+  if (!txt) { alert('Generate results first'); return; }
+  const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `handover_${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* -------------------------
+   Small utilities
+   ------------------------- */
+function clearNoteInput() { 
+  document.getElementById('general-note').value = ''; 
+  // Also clear audio notes
+  document.getElementById('audio-notes').innerHTML = '';
+  // Remove audio notes from notesLog
+  notesLog = notesLog.filter(note => !note.audioData);
+  saveToLocalStorage();
+  renderNotesLog();
+}
+function clearVitalsLog() { vitalsLog = []; renderVitalsLog(); renderVitalsChart(); renderAlertsToTabs(); }
+function clearGcsLog() { gcsLog = []; renderGcsLog(); renderAlertsToTabs(); }
+function clearNotesLog() { 
+  notesLog = []; 
+  renderNotesLog(); 
+  // Also clear audio notes
+  document.getElementById('audio-notes').innerHTML = '';
+}
+
+/* -------------------------
+   Tab behaviour & init
+   ------------------------- */
+function openTab(evt, tabName) {
+  const tabs = document.getElementsByClassName('tab-content');
+  for (let t of tabs) t.style.display = 'none';
+  const btns = document.getElementsByClassName('tab-button');
+  for (let b of btns) b.className = b.className.replace(' active','');
+  document.getElementById(tabName).style.display = 'block';
+  evt.currentTarget.className += ' active';
+}
+
+// update gcs total live
+document.addEventListener('change', function(e){
+  if (e.target && (e.target.name === 'gcs-eye' || e.target.name === 'gcs-verbal' || e.target.name === 'gcs-motor')){
+    const eye = parseInt(document.querySelector('input[name="gcs-eye"]:checked')?.value || 0);
+    const verbal = parseInt(document.querySelector('input[name="gcs-verbal"]:checked')?.value || 0);
+    const motor = parseInt(document.querySelector('input[name="gcs-motor"]:checked')?.value || 0);
+    const total = (eye||0)+(verbal||0)+(motor||0);
+    document.getElementById('gcs-total').innerText = `Total GCS Score: ${total} / 15 (E${eye} V${verbal} M${motor})`;
+  }
+});
+
+// Audio recording functionality
+document.getElementById('record-note').addEventListener('click', function() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    this.textContent = "Record Audio Note";
+    this.classList.remove("btn-primary");
+    this.classList.add("btn-secondary");
+  } else {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
+        
+        mediaRecorder.addEventListener("dataavailable", event => {
+          audioChunks.push(event.data);
+        });
+        
+        mediaRecorder.addEventListener("stop", () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          
+          const audioContainer = document.getElementById('audio-notes');
+          const audioItem = document.createElement('div');
+          audioItem.className = 'log-item';
+          
+          const timestamp = nowTimestamp();
+          audioItem.innerHTML = `
+            <div><strong>${timestamp}</strong> - Audio Note</div>
+            <audio controls src="${audioUrl}"></audio>
+          `;
+          
+          audioContainer.insertBefore(audioItem, audioContainer.firstChild);
+          
+          // Save audio data
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = function() {
+            notesLog.unshift({ 
+              time: timestamp, 
+              iso: formatDateTimeISO(), 
+              note: "[Audio recording]",
+              audioData: reader.result
+            });
+            if (notesLog.length > 200) notesLog.length = 200;
+            saveToLocalStorage();
+            renderNotesLog();
+            renderPatientList();
+          };
+          
+          audioChunks = [];
+        });
+        
+        this.textContent = "Stop Recording";
+        this.classList.remove("btn-secondary");
+        this.classList.add("btn-primary");
+      })
+      .catch(err => {
+        console.error("Error accessing microphone:", err);
+        alert("Could not access microphone. Audio recording unavailable.");
+      });
+  }
+});
+
+/* initial render */
+document.addEventListener('DOMContentLoaded', function() {
+  loadFromLocalStorage();
+  
+  // If no current patient, create one
+  if (!currentPatientId || !patients[currentPatientId]) {
+    addPatient();
+  } else {
+    switchPatient(currentPatientId);
+  }
+  
+  renderVitalsLog();
+  renderGcsLog();
+  renderNotesLog();
+  renderAlertsToTabs();
+  renderVitalsChart();
+  renderPatientList();
+  updateCurrentPatientDisplay();
+  updateAllTabPatientDisplays();
+});
+
+</script>
+</body>
+</html>

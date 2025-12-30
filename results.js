@@ -4,7 +4,10 @@
  */
 
 // Import patient management
-import { patientInfo, vitalsLog, gcsLog, notesLog } from './patient.js';
+import { patientInfo } from './patient.js';
+import { getVitalsLog } from './vitals.js';
+import { getGcsLog } from './gcs.js';
+import { getNotesLog } from './notes.js';
 
 /**
  * Generate handover results
@@ -12,6 +15,10 @@ import { patientInfo, vitalsLog, gcsLog, notesLog } from './patient.js';
 export function generateResults() {
     // Ensure patient info up to date
     patientInfo.responderId = document.getElementById('responder-id').value.trim();
+    const vitalsLog = getVitalsLog();
+    const gcsLog = getGcsLog();
+    const notesLog = getNotesLog();
+
     patientInfo.incident = document.getElementById('incident-type').value;
     patientInfo.name = document.getElementById('patient-name').value.trim();
     patientInfo.age = document.getElementById('patient-age').value.trim();

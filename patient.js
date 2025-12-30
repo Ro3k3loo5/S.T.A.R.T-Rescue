@@ -4,7 +4,7 @@
  */
 
 // Global patient data
-let patientInfo = {
+export let patientInfo = {
     responderId: '',
     incident: '',
     name: '',
@@ -18,8 +18,8 @@ let patientInfo = {
     pupilsReactive: false
 };
 
-let currentPatientId = null;
-let patients = {};
+export let currentPatientId = null;
+export let patients = {};
 
 /**
  * Load patient data from localStorage
@@ -150,6 +150,9 @@ export function removePatient(patientId) {
     updateCurrentPatientDisplay();
 }
 
+// Provide deletePatient alias for compatibility with UI and other modules
+export const deletePatient = removePatient;
+
 /**
  * Render patient list
  */
@@ -183,7 +186,7 @@ export function renderPatientList() {
         chip.innerHTML = `
             ${displayName}
             ${priorityIndicator}
-            <span class="remove" onclick="event.stopPropagation(); removePatient('${id}')">×</span>
+            <span class="remove" onclick="event.stopPropagation(); deletePatient('${id}')">×</span>
         `;
         chip.onclick = () => {
             switchPatient(id);
