@@ -22,10 +22,19 @@ export function loadFromLocalStorage() {
 }
 
 /**
- * Save GCS data to localStorage
+ * Persist gcs into the current patient object and save using patient.saveToLocalStorage
  */
-export function saveToLocalStorage() {
-    localStorage.setItem('gcsLog', JSON.stringify(gcsLog));
+export function persistGcs() {
+    if (currentPatientId) {
+        patients[currentPatientId] = patients[currentPatientId] || { info: {...patientInfo}, vitals: [], gcs: [], notes: [] };
+        patients[currentPatientId].gcs = [...gcsLog];
+        saveToLocalStorage();
+    }
+}
+
+export function setGcsLog(arr) {
+    gcsLog = Array.isArray(arr) ? [...arr] : [];
+    renderGcsLog();
 }
 
 /**
@@ -47,10 +56,11 @@ export function submitGCS() {
     gcsLog.unshift(item);
     if (gcsLog.length > 200) gcsLog.length = 200;
 
-    // Update display
-    document.getElementById('gcs-total').innerText = `Total GCS Score: ${total} / 15 (E${eye} V${verbal} M${motor})`;
+    // Update display (defensive)
+    const totalEl = document.getElementById('gcs-total');
+    if (totalEl) totalEl.innerText = `Total GCS Score: ${total} / 15 (E${eye} V${verbal} M${motor})`;
     
-    saveToLocalStorage();
+    persistGcs();
     renderGcsLog();
     clearGCSInputs();
 }
@@ -62,10 +72,11 @@ export function clearGCSInputs() {
     const groups = ['gcs-eye', 'gcs-verbal', 'gcs-motor'];
     
     groups.forEach(name => {
-        document.querySelectorAll(`input[name="${name}"]`).forEach(i => i.checked = false);
+        const inputs = document.querySelectorAll(`input[name="${name}"]`);
+        if (inputs && inputs.forEach) inputs.forEach(i => i.checked = false);
     });
     
-    document.getElementById('gcs-total').innerText = 'Total GCS Score: 0 / 15';
+    const totalEl = document.getElementById('gcs-total'); if (totalEl) totalEl.innerText = 'Total GCS Score: 0 / 15';
 }
 
 /**
@@ -73,10 +84,11 @@ export function clearGCSInputs() {
  */
 export function renderGcsLog() {
     const el = document.getElementById('gcs-log');
+    if (!el) return; // Defensive guard
     el.innerHTML = '';
-    if (gcsLog.length === 0) { 
-        el.innerHTML = '<div class="log-item meta">No GCS recorded yet</div>'; 
-        return; 
+    if (gcsLog.length === 0) {
+        el.innerHTML = '<div class="log-item meta">No GCS recorded yet</div>';
+        return;
     }
     
     gcsLog.forEach(item => {

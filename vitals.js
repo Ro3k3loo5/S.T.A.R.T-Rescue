@@ -5,7 +5,7 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
-import { nowTimestamp } from './utils.js';
+import { nowTimestamp, getValue, setValue } from './utils.js';
 
 // Global vitals data
 let vitalsLog = []; // newest first
@@ -22,6 +22,7 @@ export function showVitalInfo(vitalType) {
     const modal = document.getElementById('vital-info-modal');
     const title = document.getElementById('vital-info-title');
     const content = document.getElementById('vital-info-content');
+    if (!modal || !title || !content) return; // Defensive guard in case DOM not present
 
     // Define vital information (shortened for brevity — mirrors OldIndex.html ranges)
     const vitalInfo = {
@@ -119,10 +120,20 @@ export function loadFromLocalStorage() {
 }
 
 /**
- * Save vitals data to localStorage
+ * Persist vitals into the current patient object and save using patient.saveToLocalStorage
  */
-export function saveToLocalStorage() {
-    localStorage.setItem('vitalsLog', JSON.stringify(vitalsLog));
+export function persistVitals() {
+    if (currentPatientId) {
+        patients[currentPatientId] = patients[currentPatientId] || { info: {...patientInfo}, vitals: [], gcs: [], notes: [] };
+        patients[currentPatientId].vitals = [...vitalsLog];
+        saveToLocalStorage();
+    }
+}
+
+export function setVitalsLog(arr) {
+    vitalsLog = Array.isArray(arr) ? [...arr] : [];
+    renderVitalsLog();
+    renderVitalsChart();
 }
 
 /**
@@ -193,12 +204,14 @@ function assessVital(value, vitalType) {
  * Update vital indicator styling
  */
 export function updateVitalIndicator(input, vitalType) {
+    if (!input) return; // Defensive
     // Remove all existing classes
-    input.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
+    if (input.classList) input.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
     
-    const assessment = assessVital(input.value, vitalType);
-    if (input.value && input.value !== '') {
-        input.classList.add(`vital-${assessment}`);
+    const val = input.value || '';
+    const assessment = assessVital(val, vitalType);
+    if (val !== '') {
+        if (input.classList) input.classList.add(`vital-${assessment}`);
     }
 }
 
@@ -215,38 +228,38 @@ export function getVitalClass(value, vitalType) {
  */
 export function submitVitals() {
     // pull patient info (keep patientInfo up to date)
-    patientInfo.responderId = document.getElementById('responder-id').value.trim();
-    patientInfo.incident = document.getElementById('incident-type').value;
-    patientInfo.name = document.getElementById('patient-name').value.trim();
-    patientInfo.age = document.getElementById('patient-age').value.trim();
-    patientInfo.allergies = document.getElementById('allergies').value.trim();
-    patientInfo.medication = document.getElementById('medication').value.trim();
-    patientInfo.history = document.getElementById('history').value.trim();
-    patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
-    patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
-    patientInfo.priority = document.getElementById('patient-priority').value;
-    patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+    patientInfo.responderId = getValue('responder-id');
+    patientInfo.incident = getValue('incident-type');
+    patientInfo.name = getValue('patient-name');
+    patientInfo.age = getValue('patient-age');
+    patientInfo.allergies = getValue('allergies');
+    patientInfo.medication = getValue('medication');
+    patientInfo.history = getValue('history');
+    patientInfo.lastIntake = getValue('last-intake');
+    patientInfo.signsSymptoms = getValue('signs-symptoms');
+    patientInfo.priority = getValue('patient-priority');
+    patientInfo.pupilsReactive = getValue('pupils-reactive', false);
 
     const item = {
         time: nowTimestamp(),
         iso: new Date().toISOString(),
-        bpSys: document.getElementById('bp-sys').value.trim(),
-        bpDia: document.getElementById('bp-dia').value.trim(),
-        pulse: document.getElementById('pulse').value.trim(),
-        spo2: document.getElementById('spo2').value.trim(),
-        o2Delivery: document.getElementById('o2-delivery').value,
-        o2Flow: document.getElementById('o2-flow').value.trim(),
-        rrate: document.getElementById('rrate').value.trim(),
-        hgt: document.getElementById('hgt').value.trim(),
-        temp: document.getElementById('temp').value.trim(),
-        capRefill: document.getElementById('cap-refill').value.trim(),
-        pupilLeft: document.getElementById('pupil-left').value.trim(),
-        pupilRight: document.getElementById('pupil-right').value.trim(),
-        pain: document.getElementById('pain').value.trim(),
-        ecg: document.getElementById('ecg').value,
-        painLocation: document.getElementById('pain-location').value.trim(),
-        skin: document.getElementById('skin').value,
-        pupilsReactive: document.getElementById('pupils-reactive').checked
+        bpSys: getValue('bp-sys'),
+        bpDia: getValue('bp-dia'),
+        pulse: getValue('pulse'),
+        spo2: getValue('spo2'),
+        o2Delivery: getValue('o2-delivery'),
+        o2Flow: getValue('o2-flow'),
+        rrate: getValue('rrate'),
+        hgt: getValue('hgt'),
+        temp: getValue('temp'),
+        capRefill: getValue('cap-refill'),
+        pupilLeft: getValue('pupil-left'),
+        pupilRight: getValue('pupil-right'),
+        pain: getValue('pain'),
+        ecg: getValue('ecg'),
+        painLocation: getValue('pain-location'),
+        skin: getValue('skin'),
+        pupilsReactive: getValue('pupils-reactive', false)
     };
 
     // Prepend newest
@@ -254,7 +267,7 @@ export function submitVitals() {
     // Keep only reasonable history length
     if (vitalsLog.length > 200) vitalsLog.length = 200;
 
-    saveToLocalStorage();
+    persistVitals();
     renderVitalsLog();
     clearVitalsInputs();
 }
@@ -270,12 +283,11 @@ export function clearVitalsInputs() {
     ];
     
     fields.forEach(id => {
+        setValue(id, '');
         const el = document.getElementById(id);
         if (!el) return;
-        if (el.type === 'checkbox') el.checked = false;
-        else el.value = '';
         // Remove color classes
-        el.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
+        if (el.classList) el.classList.remove('vital-normal', 'vital-abnormal', 'vital-critical');
     });
 }
 
@@ -284,10 +296,11 @@ export function clearVitalsInputs() {
  */
 export function renderVitalsLog() {
     const el = document.getElementById('vitals-log');
+    if (!el) return; // Defensive guard
     el.innerHTML = '';
-    if (vitalsLog.length === 0) { 
-        el.innerHTML = '<div class="log-item meta">No vitals recorded yet</div>'; 
-        return; 
+    if (vitalsLog.length === 0) {
+        el.innerHTML = '<div class="log-item meta">No vitals recorded yet</div>';
+        return;
     }
     
     vitalsLog.forEach(item => {
@@ -351,6 +364,7 @@ export function renderVitalsLog() {
  */
 export function renderVitalsChart() {
     const container = document.getElementById('vitals-chart-container');
+    if (!container) return; // Defensive guard
     container.innerHTML = '';
     
     if (vitalsLog.length < 2) return;
@@ -364,8 +378,9 @@ export function renderVitalsChart() {
     chartTitle.textContent = 'BP Trend (Systolic)';
     container.appendChild(chartTitle);
     
-    const maxBP = Math.max(...vitalsLog.map(v => parseInt(v.bpSys) || 0));
-    const minBP = Math.min(...vitalsLog.map(v => parseInt(v.bpSys) || 0));
+    const bps = vitalsLog.map(v => parseInt(v.bpSys)).filter(n => !isNaN(n));
+    const maxBP = bps.length > 0 ? Math.max(...bps) : 0;
+    const minBP = bps.length > 0 ? Math.min(...bps) : 0;
     
     // Show last 5 readings
     vitalsLog.slice(0, 5).reverse().forEach((v, i) => {

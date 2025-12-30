@@ -10,6 +10,7 @@ import { renderGcsLog, submitGCS, clearGCSInputs, loadFromLocalStorage as loadGc
 import { renderNotesLog, addNote, clearNoteInput, setupAudioRecorder, loadFromLocalStorage as loadNotes } from './notes.js';
 import { renderCprLog, renderCprEvents, renderCprTimeline, startCPR, stopCPR, addCprEvent, togglePauseCPR, loadFromLocalStorage as loadCpr } from './cpr.js';
 import { generateResults, showResults, closeResults, copyResults, downloadReport } from './results.js';
+import { q } from './utils.js';
 
 // Global variables
 let updateAvailable = false;
@@ -58,7 +59,7 @@ function toggleMenu() {
 window.addEventListener('click', function(event) {
     if (!event.target.matches('.menu-button') && !event.target.matches('.menu-container')) {
         const dropdown = document.getElementById("menu-dropdown");
-        if (dropdown.classList.contains('show')) {
+        if (dropdown && dropdown.classList && dropdown.classList.contains('show')) {
             dropdown.classList.remove('show');
         }
     }
@@ -87,14 +88,14 @@ function applyUpdate() {
                 window.location.reload();
             }
         });
-        document.getElementById('update-notification').style.display = 'none';
+        const un = q('update-notification'); if (un) un.style.display = 'none';
     } else {
         window.location.reload(); // Simple reload if no waiting SW is detected
     }
 }
 
 function dismissUpdate() {
-    document.getElementById('update-notification').style.display = 'none';
+    const un = q('update-notification'); if (un) un.style.display = 'none';
 }
 
 
@@ -126,13 +127,25 @@ function initApp() {
     // Set up event listener for the audio recorder setup
     setupAudioRecorder();
 
-    // Check if there is a current patient, otherwise create one
-    if (!currentPatientId || !patients[currentPatientId]) {
-        addPatient();
-    } else {
-        // Ensure a sensible tab is opened on load
-        openTab(null, 'patient-info');
+    // Ensure we have a current patient set.
+    // Prefer restoring an existing patient rather than creating a new empty one to avoid duplicate "New Patient" chips from previous runs.
+    if (!currentPatientId) {
+        const ids = Object.keys(patients);
+        if (ids.length > 0) {
+            // Switch to the first saved patient
+            switchPatient(ids[0]);
+        } else {
+            addPatient();
+        }
+    } else if (!patients[currentPatientId]) {
+        // If currentPatientId points to a missing patient, fall back to any existing one or create new
+        const ids = Object.keys(patients);
+        if (ids.length > 0) switchPatient(ids[0]);
+        else addPatient();
     }
+
+    // Ensure a sensible tab is opened on load
+    openTab(null, 'patient-info');
 }
 
 // =========================================================================
@@ -169,8 +182,8 @@ window.patientNameChanged = patientNameChanged;
 window.patientPriorityChanged = patientPriorityChanged; 
 // CPR Modal functions (assuming they are in one of the imported modules or need defining)
 // Defining placeholders for modal functions if they are missing from your modules
-window.closeVitalInfoModal = () => document.getElementById('vital-info-modal').style.display = 'none';
-window.closePulseCheckModal = () => document.getElementById('pulse-check-modal').style.display = 'none';
+window.closeVitalInfoModal = () => { const m = q('vital-info-modal'); if (m) m.style.display = 'none'; };
+window.closePulseCheckModal = () => { const p = q('pulse-check-modal'); if (p) p.style.display = 'none'; };
 // Assuming pulseDetected and noPulseDetected are defined in cpr.js or similar
 // window.pulseDetected = pulseDetected;
 // window.noPulseDetected = noPulseDetected;

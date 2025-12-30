@@ -1,4 +1,4 @@
-const CACHE_NAME = 'start-rescue-cache-v2'; // Increased version to force update
+const CACHE_NAME = 'start-rescue-cache-v3'; // Increased version to force update
 const urlsToCache = [
     './',
     './index.html',

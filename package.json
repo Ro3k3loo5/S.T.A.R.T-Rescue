@@ -1,0 +1,12 @@
+{
+  "name": "start-rescue-playwright",
+  "version": "0.0.0",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  },
+  "scripts": {
+    "test:playwright:install": "npm i -D @playwright/test && npx playwright install",
+    "test:playwright": "playwright test --reporter=list"
+  }
+}

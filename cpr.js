@@ -4,8 +4,8 @@
  */
 
 // Import patient management
-import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
-import { nowTimestamp } from './utils.js';
+import { patientInfo, currentPatientId, patients } from './patient.js';
+import { nowTimestamp, getValue, setValue, q } from './utils.js';
 
 // Global CPR data
 let cprLog = [];
@@ -61,7 +61,7 @@ function initAudioContext() {
  * Play metronome beep
  */
 function playBeep() {
-    if (!document.getElementById('audio-enabled').checked) return;
+    if (!getValue('audio-enabled', false)) return;
     
     initAudioContext();
     
@@ -84,8 +84,8 @@ function playBeep() {
  */
 export function updateMetronomeRate(value) {
     metronomeRate = parseInt(value);
-    document.getElementById('rate-value').textContent = value;
-    document.getElementById('metronome-rate').textContent = value;
+    const rv = q('rate-value'); if (rv) rv.textContent = value;
+    const mr = q('metronome-rate'); if (mr) mr.textContent = value;
     
     if (metronomeInterval) {
         stopMetronome();
@@ -131,8 +131,8 @@ function startMetronome() {
         updateCompressionCount();
     }, interval);
     
-    document.getElementById('metronome-start').textContent = 'Stop';
-    document.getElementById('metronome-display').classList.add('active');
+    const ms = q('metronome-start'); if (ms) ms.textContent = 'Stop';
+    const md = q('metronome-display'); if (md && md.classList) md.classList.add('active');
 }
 
 /**
@@ -144,19 +144,20 @@ function stopMetronome() {
         metronomeInterval = null;
     }
     
-    document.getElementById('metronome-start').textContent = 'Start';
-    document.getElementById('metronome-display').classList.remove('active');
-    document.getElementById('metronome-beat').classList.remove('active');
+    const ms = q('metronome-start'); if (ms) ms.textContent = 'Start';
+    const md = q('metronome-display'); if (md && md.classList) md.classList.remove('active');
+    const mb = q('metronome-beat'); if (mb && mb.classList) mb.classList.remove('active');
 }
 
 /**
  * Flash beat indicator
  */
 function flashBeatIndicator() {
-    const beatIndicator = document.getElementById('metronome-beat');
-    beatIndicator.classList.add('active');
+    const beatIndicator = q('metronome-beat');
+    if (!beatIndicator) return;
+    if (beatIndicator.classList) beatIndicator.classList.add('active');
     setTimeout(() => {
-        beatIndicator.classList.remove('active');
+        if (beatIndicator.classList) beatIndicator.classList.remove('active');
     }, 200);
 }
 
@@ -165,7 +166,7 @@ function flashBeatIndicator() {
  */
 function updateCompressionCount() {
     compressionCount++;
-    document.getElementById('compression-counter').textContent = compressionCount;
+    const cc = q('compression-counter'); if (cc) cc.textContent = compressionCount;
     
     // Check if we've reached 2 minutes (120 compressions at 60/min)
     if (compressionCount >= cycleTarget) {
@@ -173,12 +174,12 @@ function updateCompressionCount() {
         stopMetronome();
         
         // Show pulse check modal
-        document.getElementById('pulse-check-modal').style.display = 'block';
+        const pcm = q('pulse-check-modal'); if (pcm) pcm.style.display = 'block';
     }
     
     const currentCycle = Math.ceil(compressionCount / cycleTarget);
     const cycleProgress = compressionCount % cycleTarget || cycleTarget;
-    document.getElementById('compression-cycle').textContent = `Cycle: ${currentCycle}/${cycleProgress}`;
+    const ccy = q('compression-cycle'); if (ccy) ccy.textContent = `Cycle: ${currentCycle}/${cycleProgress}`;
 }
 
 /**
@@ -195,9 +196,9 @@ export function resetMetronome() {
         cprTimerInterval = null;
     }
     
-    document.getElementById('compression-counter').textContent = '0';
-    document.getElementById('compression-cycle').textContent = 'Cycle: 0/0';
-    document.getElementById('cpr-timer').textContent = '00:00';
+    const cc = q('compression-counter'); if (cc) cc.textContent = '0';
+    const ccy = q('compression-cycle'); if (ccy) ccy.textContent = 'Cycle: 0/0';
+    const ct = q('cpr-timer'); if (ct) ct.textContent = '00:00';
 }
 
 /**
@@ -210,7 +211,7 @@ function startCPRTimer() {
         const seconds = Math.floor((elapsed % 60000) / 1000);
         
         const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        document.getElementById('cpr-timer').textContent = display;
+        const ct = q('cpr-timer'); if (ct) ct.textContent = display;
     }, 1000);
 }
 
@@ -227,7 +228,7 @@ function formatDuration(ms) {
  * Close pulse check modal
  */
 export function closePulseCheckModal() {
-    document.getElementById('pulse-check-modal').style.display = 'none';
+    const pcm = q('pulse-check-modal'); if (pcm) pcm.style.display = 'none';
 }
 
 /**
@@ -290,7 +291,7 @@ export function noPulseDetected() {
     // Reset compression count but continue metronome
     compressionCount = 0;
     cycleCount++;
-    document.getElementById('compression-cycle').textContent = `Cycle: ${cycleCount}/0`;
+    const ccy = q('compression-cycle'); if (ccy) ccy.textContent = `Cycle: ${cycleCount}/0`;
     
     // Continue CPR
     startMetronome();
@@ -316,7 +317,8 @@ function getRhythmName(value) {
  * Log rhythm change
  */
 export function logRhythmChange() {
-    const rhythm = document.getElementById('rhythm-select').value;
+    const sel = q('rhythm-select');
+    const rhythm = sel ? sel.value : '';
     if (!rhythm) {
         alert('Please select a rhythm');
         return;
@@ -349,7 +351,7 @@ export function logRhythmChange() {
  * Log shock delivery
  */
 export function logShock() {
-    const energy = document.getElementById('shock-energy').value;
+    const energy = getValue('shock-energy');
     if (!energy || energy <= 0) {
         alert('Please enter a valid energy level');
         return;
@@ -371,7 +373,7 @@ export function logShock() {
         details: `Shock delivered: ${energy}J`
     });
     
-    document.getElementById('shock-energy').value = '';
+    setValue('shock-energy','');
     saveToLocalStorage();
     renderCprEvents();
     renderCprTimeline();
@@ -381,18 +383,18 @@ export function logShock() {
  * Handle medication change
  */
 export function handleMedicationChange() {
-    const medication = document.getElementById('medication-select').value;
-    const otherGroup = document.getElementById('other-med-group');
-    const epiGroup = document.getElementById('epi-dose-group');
+    const medication = getValue('medication-select');
+    const otherGroup = q('other-med-group');
+    const epiGroup = q('epi-dose-group');
     
     // Hide all special groups first
-    otherGroup.style.display = 'none';
-    epiGroup.style.display = 'none';
+    if (otherGroup) otherGroup.style.display = 'none';
+    if (epiGroup) epiGroup.style.display = 'none';
     
     if (medication === 'other') {
-        otherGroup.style.display = 'block';
+        if (otherGroup) otherGroup.style.display = 'block';
     } else if (medication === 'epinephrine') {
-        epiGroup.style.display = 'block';
+        if (epiGroup) epiGroup.style.display = 'block';
     }
 }
 
@@ -400,7 +402,7 @@ export function handleMedicationChange() {
  * Log medication administration
  */
 export function logMedication() {
-    const medication = document.getElementById('medication-select').value;
+    const medication = getValue('medication-select');
     if (!medication) {
         alert('Please select a medication');
         return;
@@ -409,15 +411,15 @@ export function logMedication() {
     let details = medication;
     
     if (medication === 'other') {
-        const otherMed = document.getElementById('other-medication').value;
+        const otherMed = getValue('other-medication');
         if (!otherMed) {
             alert('Please specify medication');
             return;
         }
         details = otherMed;
     } else if (medication === 'epinephrine') {
-        const dose = document.getElementById('epi-dose').value;
-        const interval = document.getElementById('epi-interval').value;
+        const dose = getValue('epi-dose');
+        const interval = getValue('epi-interval');
         details = `Epinephrine ${dose}mg every ${interval} min`;
     }
     
@@ -438,9 +440,9 @@ export function logMedication() {
     });
     
     // Reset form
-    document.getElementById('medication-select').value = '';
-    document.getElementById('other-medication').value = '';
-    document.getElementById('epi-dose').value = '1';
+    setValue('medication-select','');
+    setValue('other-medication','');
+    setValue('epi-dose','1');
     
     saveToLocalStorage();
     renderCprEvents();
@@ -451,19 +453,19 @@ export function logMedication() {
  * Handle intervention change
  */
 export function handleInterventionChange() {
-    const intervention = document.getElementById('intervention-select').value;
-    const otherGroup = document.getElementById('other-int-group');
-    const notesGroup = document.getElementById('int-notes-group');
+    const intervention = getValue('intervention-select');
+    const otherGroup = q('other-int-group');
+    const notesGroup = q('int-notes-group');
     
     // Hide all special groups first
-    otherGroup.style.display = 'none';
-    notesGroup.style.display = 'none';
+    if (otherGroup) otherGroup.style.display = 'none';
+    if (notesGroup) notesGroup.style.display = 'none';
     
     if (intervention === 'other-int') {
-        otherGroup.style.display = 'block';
-        notesGroup.style.display = 'block';
+        if (otherGroup) otherGroup.style.display = 'block';
+        if (notesGroup) notesGroup.style.display = 'block';
     } else if (intervention) {
-        notesGroup.style.display = 'block';
+        if (notesGroup) notesGroup.style.display = 'block';
     }
 }
 
@@ -471,7 +473,7 @@ export function handleInterventionChange() {
  * Log intervention
  */
 export function logIntervention() {
-    const intervention = document.getElementById('intervention-select').value;
+    const intervention = getValue('intervention-select');
     if (!intervention) {
         alert('Please select an intervention');
         return;
@@ -480,7 +482,7 @@ export function logIntervention() {
     let details = intervention;
     
     if (intervention === 'other-int') {
-        const otherInt = document.getElementById('other-intervention').value;
+        const otherInt = getValue('other-intervention');
         if (!otherInt) {
             alert('Please specify intervention');
             return;
@@ -488,7 +490,7 @@ export function logIntervention() {
         details = otherInt;
     }
     
-    const notes = document.getElementById('intervention-notes').value;
+    const notes = getValue('intervention-notes');
     if (notes) {
         details += ` - ${notes}`;
     }
@@ -510,9 +512,9 @@ export function logIntervention() {
     });
     
     // Reset form
-    document.getElementById('intervention-select').value = '';
-    document.getElementById('other-intervention').value = '';
-    document.getElementById('intervention-notes').value = '';
+    setValue('intervention-select','');
+    setValue('other-intervention','');
+    setValue('intervention-notes','');
     
     saveToLocalStorage();
     renderCprEvents();
@@ -524,12 +526,12 @@ export function logIntervention() {
  */
 export function renderCprLog() {
     const el = document.getElementById('cpr-log');
-    if (!el) return;
+    if (!el) return; // Defensive guard
     
     el.innerHTML = '';
-    if (cprLog.length === 0) { 
-        el.innerHTML = '<div class="log-item meta">No CPR sessions recorded</div>'; 
-        return; 
+    if (cprLog.length === 0) {
+        el.innerHTML = '<div class="log-item meta">No CPR sessions recorded</div>';
+        return;
     }
     
     cprLog.forEach(session => {

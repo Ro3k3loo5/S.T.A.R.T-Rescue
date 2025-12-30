@@ -5,7 +5,7 @@
 
 // Import patient management
 import { patientInfo, currentPatientId, patients, saveToLocalStorage } from './patient.js';
-import { nowTimestamp } from './utils.js';
+import { nowTimestamp, getValue, setValue, q } from './utils.js';
 
 // Global notes data
 let notesLog = []; // newest first
@@ -28,17 +28,26 @@ export function loadFromLocalStorage() {
 }
 
 /**
- * Save notes data to localStorage
+ * Persist notes into the current patient object and save using patient.saveToLocalStorage
  */
-export function saveToLocalStorage() {
-    localStorage.setItem('notesLog', JSON.stringify(notesLog));
+export function persistNotes() {
+    if (currentPatientId) {
+        patients[currentPatientId] = patients[currentPatientId] || { info: {...patientInfo}, vitals: [], gcs: [], notes: [] };
+        patients[currentPatientId].notes = [...notesLog];
+        saveToLocalStorage();
+    }
+}
+
+export function setNotesLog(arr) {
+    notesLog = Array.isArray(arr) ? [...arr] : [];
+    renderNotesLog();
 }
 
 /**
  * Add a new note
  */
 export function addNote() {
-    const text = document.getElementById('general-note').value.trim();
+    const text = getValue('general-note').trim();
     if (!text) { 
         alert('Add a note before hitting Add Note'); 
         return; 
@@ -52,21 +61,21 @@ export function addNote() {
     
     if (notesLog.length > 200) notesLog.length = 200;
     
-    saveToLocalStorage();
+    persistNotes();
     renderNotesLog();
-    document.getElementById('general-note').value = '';
+    setValue('general-note', '');
 }
 
 /**
  * Clear note input
  */
 export function clearNoteInput() { 
-    document.getElementById('general-note').value = ''; 
+    setValue('general-note', ''); 
     // Also clear audio notes display
-    document.getElementById('audio-notes').innerHTML = '';
+    const audioEl = q('audio-notes'); if (audioEl) audioEl.innerHTML = '';
     // Remove audio notes from notesLog
     notesLog = notesLog.filter(note => !note.audioData);
-    saveToLocalStorage();
+    persistNotes();
     renderNotesLog();
 }
 
@@ -75,10 +84,11 @@ export function clearNoteInput() {
  */
 export function renderNotesLog() {
     const el = document.getElementById('notes-log');
+    if (!el) return; // Defensive guard
     el.innerHTML = '';
-    if (notesLog.length === 0) { 
-        el.innerHTML = '<div class="log-item meta">No notes added</div>'; 
-        return; 
+    if (notesLog.length === 0) {
+        el.innerHTML = '<div class="log-item meta">No notes added</div>';
+        return;
     }
     
     notesLog.forEach(n => {
@@ -117,7 +127,7 @@ export function initAudioRecording() {
                         const audioUrl = URL.createObjectURL(audioBlob);
                         const audio = new Audio(audioUrl);
                         
-                        const audioContainer = document.getElementById('audio-notes');
+                        const audioContainer = q('audio-notes');
                         const audioItem = document.createElement('div');
                         audioItem.className = 'log-item';
                         
@@ -127,7 +137,7 @@ export function initAudioRecording() {
                             <audio controls src="${audioUrl}"></audio>
                         `;
                         
-                        audioContainer.insertBefore(audioItem, audioContainer.firstChild);
+                        if (audioContainer) audioContainer.insertBefore(audioItem, audioContainer.firstChild);
                         
                         // Save audio data
                         const reader = new FileReader();
@@ -140,7 +150,7 @@ export function initAudioRecording() {
                                 audioData: reader.result
                             });
                             if (notesLog.length > 200) notesLog.length = 200;
-                            saveToLocalStorage();
+                            persistNotes();
                             renderNotesLog();
                         };
                         

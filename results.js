@@ -8,30 +8,31 @@ import { patientInfo } from './patient.js';
 import { getVitalsLog } from './vitals.js';
 import { getGcsLog } from './gcs.js';
 import { getNotesLog } from './notes.js';
+import { getValue, q } from './utils.js';
 
 /**
  * Generate handover results
  */
 export function generateResults() {
-    // Ensure patient info up to date
-    patientInfo.responderId = document.getElementById('responder-id').value.trim();
+    // Ensure patient info up to date (use safe getters)
+    patientInfo.responderId = getValue('responder-id');
     const vitalsLog = getVitalsLog();
     const gcsLog = getGcsLog();
     const notesLog = getNotesLog();
 
-    patientInfo.incident = document.getElementById('incident-type').value;
-    patientInfo.name = document.getElementById('patient-name').value.trim();
-    patientInfo.age = document.getElementById('patient-age').value.trim();
-    patientInfo.allergies = document.getElementById('allergies').value.trim();
-    patientInfo.medication = document.getElementById('medication').value.trim();
-    patientInfo.history = document.getElementById('history').value.trim();
-    patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
-    patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
-    patientInfo.priority = document.getElementById('patient-priority').value;
-    patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+    patientInfo.incident = getValue('incident-type');
+    patientInfo.name = getValue('patient-name');
+    patientInfo.age = getValue('patient-age');
+    patientInfo.allergies = getValue('allergies');
+    patientInfo.medication = getValue('medication');
+    patientInfo.history = getValue('history');
+    patientInfo.lastIntake = getValue('last-intake');
+    patientInfo.signsSymptoms = getValue('signs-symptoms');
+    patientInfo.priority = getValue('patient-priority');
+    patientInfo.pupilsReactive = getValue('pupils-reactive', false);
 
-    const showTS = document.getElementById('show-timestamps').checked;
-    const useSbarFormat = document.getElementById('sbar-format').checked;
+    const showTS = getValue('show-timestamps', false);
+    const useSbarFormat = getValue('sbar-format', false);
     
     let report = '';
     
@@ -158,14 +159,17 @@ export function generateResults() {
         }
     }
 
-    document.getElementById('results-output').value = report;
+    const out = q('results-output');
+    if (out) out.value = report;
+    else console.warn('results-output element not found');
 }
 
 /**
  * Show results modal
  */
 export function showResults() {
-    document.getElementById('results-modal').style.display = 'block';
+    const modal = q('results-modal');
+    if (modal) modal.style.display = 'block';
     generateResults();
 }
 
@@ -173,15 +177,16 @@ export function showResults() {
  * Close results modal
  */
 export function closeResults() {
-    document.getElementById('results-modal').style.display = 'none';
+    const modal = q('results-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 /**
  * Copy results to clipboard
  */
 export function copyResults() {
-    const resultsArea = document.getElementById('results-output');
-    if (!resultsArea.value) { 
+    const resultsArea = q('results-output');
+    if (!resultsArea || !resultsArea.value) { 
         alert('Generate results first'); 
         return; 
     }
@@ -197,7 +202,8 @@ export function copyResults() {
  * Download results as text file
  */
 export function downloadReport() {
-    const txt = document.getElementById('results-output').value;
+    const out = q('results-output');
+    const txt = out ? out.value : '';
     if (!txt) { 
         alert('Generate results first'); 
         return; 

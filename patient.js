@@ -4,6 +4,8 @@
  */
 
 // Global patient data
+import { getValue, setValue } from './utils.js';
+
 export let patientInfo = {
     responderId: '',
     incident: '',
@@ -48,13 +50,13 @@ export function saveToLocalStorage() {
  * Add a new patient
  */
 export function addPatient() {
-    // Save current patient if exists
+    // Save current patient if exists (placeholder — modules will persist their own logs)
     if (currentPatientId) {
         patients[currentPatientId] = {
             info: {...patientInfo},
-            vitals: [],
-            gcs: [],
-            notes: []
+            vitals: patients[currentPatientId] ? patients[currentPatientId].vitals : [],
+            gcs: patients[currentPatientId] ? patients[currentPatientId].gcs : [],
+            notes: patients[currentPatientId] ? patients[currentPatientId].notes : []
         };
     }
     
@@ -82,23 +84,23 @@ export function addPatient() {
     currentPatientId = patientId;
     patientInfo = {...patients[patientId].info};
     
-    // Clear all current data
-    // Clear UI elements
-    document.getElementById('patient-name').value = '';
-    document.getElementById('responder-id').value = patientInfo.responderId;
-    document.getElementById('incident-type').value = '';
-    document.getElementById('patient-age').value = '';
-    document.getElementById('allergies').value = '';
-    document.getElementById('medication').value = '';
-    document.getElementById('history').value = '';
-    document.getElementById('last-intake').value = '';
-    document.getElementById('signs-symptoms').value = '';
-    document.getElementById('patient-priority').value = '';
-    document.getElementById('pupils-reactive').checked = false;
+    // Clear all current data (defensive) using safe setters
+    setValue('patient-name', '');
+    setValue('responder-id', patientInfo.responderId);
+    setValue('incident-type', '');
+    setValue('patient-age', '');
+    setValue('allergies', '');
+    setValue('medication', '');
+    setValue('history', '');
+    setValue('last-intake', '');
+    setValue('signs-symptoms', '');
+    setValue('patient-priority', '');
+    setValue('pupils-reactive', false);
     
     saveToLocalStorage();
     renderPatientList();
     updateCurrentPatientDisplay();
+    return patientId;
 }
 
 /**
@@ -107,13 +109,13 @@ export function addPatient() {
 export function switchPatient(patientId) {
     if (!patients[patientId]) return;
     
-    // Save current patient if exists
+    // Save current patient if exists (placeholder)
     if (currentPatientId) {
         patients[currentPatientId] = {
             info: {...patientInfo},
-            vitals: [],
-            gcs: [],
-            notes: []
+            vitals: patients[currentPatientId] ? patients[currentPatientId].vitals : [],
+            gcs: patients[currentPatientId] ? patients[currentPatientId].gcs : [],
+            notes: patients[currentPatientId] ? patients[currentPatientId].notes : []
         };
     }
     
@@ -125,6 +127,7 @@ export function switchPatient(patientId) {
     renderPatientList();
     updateCurrentPatientDisplay();
     saveToLocalStorage();
+    return patientId;
 }
 
 /**
@@ -158,21 +161,19 @@ export const deletePatient = removePatient;
  */
 export function renderPatientList() {
     const patientListEl = document.getElementById('patient-list');
+    if (!patientListEl) return; // Defensive guard
     patientListEl.innerHTML = '';
     
-    // Only show patients with names
-    const namedPatients = Object.keys(patients).filter(id => 
-        patients[id].info.name && patients[id].info.name.trim() !== ''
-    );
-    
-    if (namedPatients.length === 0) {
-        patientListEl.innerHTML = '<div class="meta">No named patients yet</div>';
+    // Show all patients (use a friendly name for unnamed patients)
+    const allIds = Object.keys(patients);
+    if (allIds.length === 0) {
+        patientListEl.innerHTML = '<div class="meta">No patients yet</div>';
         return;
     }
     
-    namedPatients.forEach(id => {
+    allIds.forEach(id => {
         const patient = patients[id];
-        const displayName = patient.info.name;
+        const displayName = patient.info.name && patient.info.name.trim() !== '' ? patient.info.name : 'New Patient';
         const priority = patient.info.priority;
         
         const chip = document.createElement('div');
@@ -201,6 +202,7 @@ export function renderPatientList() {
  */
 export function updateCurrentPatientDisplay() {
     const displayEl = document.getElementById('current-patient-display');
+    if (!displayEl) return;
     if (patientInfo.name && patientInfo.name.trim() !== '') {
         displayEl.textContent = patientInfo.name;
     } else {
@@ -212,41 +214,46 @@ export function updateCurrentPatientDisplay() {
  * Update patient info fields
  */
 export function updatePatientInfoFields() {
-    document.getElementById('responder-id').value = patientInfo.responderId;
-    document.getElementById('incident-type').value = patientInfo.incident;
-    document.getElementById('patient-name').value = patientInfo.name;
-    document.getElementById('patient-age').value = patientInfo.age;
-    document.getElementById('allergies').value = patientInfo.allergies;
-    document.getElementById('medication').value = patientInfo.medication;
-    document.getElementById('history').value = patientInfo.history;
-    document.getElementById('last-intake').value = patientInfo.lastIntake;
-    document.getElementById('signs-symptoms').value = patientInfo.signsSymptoms || '';
-    document.getElementById('patient-priority').value = patientInfo.priority || '';
-    document.getElementById('pupils-reactive').checked = patientInfo.pupilsReactive || false;
+    const fields = [
+        'responder-id','incident-type','patient-name','patient-age','allergies','medication',
+        'history','last-intake','signs-symptoms','patient-priority','pupils-reactive'
+    ];
+    
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        switch(id) {
+            case 'pupils-reactive':
+                el.checked = patientInfo.pupilsReactive || false;
+                break;
+            default:
+                el.value = patientInfo[id.replace(/-/g,'')] || patientInfo[id] || '';
+        }
+    });
 }
 
 /**
  * Handle patient info changes
  */
 export function patientInfoChanged() {
-    // Update patientInfo object with current form values
-    patientInfo.responderId = document.getElementById('responder-id').value.trim();
-    patientInfo.incident = document.getElementById('incident-type').value;
-    patientInfo.age = document.getElementById('patient-age').value.trim();
-    patientInfo.allergies = document.getElementById('allergies').value.trim();
-    patientInfo.medication = document.getElementById('medication').value.trim();
-    patientInfo.history = document.getElementById('history').value.trim();
-    patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
-    patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
-    patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
+    // Update patientInfo object with current form values using safe getters
+    patientInfo.responderId = getValue('responder-id');
+    patientInfo.incident = getValue('incident-type');
+    patientInfo.age = getValue('patient-age');
+    patientInfo.allergies = getValue('allergies');
+    patientInfo.medication = getValue('medication');
+    patientInfo.history = getValue('history');
+    patientInfo.lastIntake = getValue('last-intake');
+    patientInfo.signsSymptoms = getValue('signs-symptoms');
+    patientInfo.pupilsReactive = getValue('pupils-reactive', false);
     
     // Save current patient data
     if (currentPatientId) {
         patients[currentPatientId] = {
             info: {...patientInfo},
-            vitals: [],
-            gcs: [],
-            notes: []
+            vitals: patients[currentPatientId] ? patients[currentPatientId].vitals : [],
+            gcs: patients[currentPatientId] ? patients[currentPatientId].gcs : [],
+            notes: patients[currentPatientId] ? patients[currentPatientId].notes : []
         };
         
         saveToLocalStorage();
@@ -259,27 +266,27 @@ export function patientInfoChanged() {
  * Handle patient name changes (special handling for patient list)
  */
 export function patientNameChanged() {
-    const newName = document.getElementById('patient-name').value.trim();
+    const newName = getValue('patient-name');
     
-    // Update patientInfo object with current form values
-    patientInfo.responderId = document.getElementById('responder-id').value.trim();
-    patientInfo.incident = document.getElementById('incident-type').value;
+    // Update patientInfo object with current form values using safe getters
+    patientInfo.responderId = getValue('responder-id');
+    patientInfo.incident = getValue('incident-type');
     patientInfo.name = newName;
-    patientInfo.age = document.getElementById('patient-age').value.trim();
-    patientInfo.allergies = document.getElementById('allergies').value.trim();
-    patientInfo.medication = document.getElementById('medication').value.trim();
-    patientInfo.history = document.getElementById('history').value.trim();
-    patientInfo.lastIntake = document.getElementById('last-intake').value.trim();
-    patientInfo.signsSymptoms = document.getElementById('signs-symptoms').value.trim();
-    patientInfo.pupilsReactive = document.getElementById('pupils-reactive').checked;
-    
+    patientInfo.age = getValue('patient-age');
+    patientInfo.allergies = getValue('allergies');
+    patientInfo.medication = getValue('medication');
+    patientInfo.history = getValue('history');
+    patientInfo.lastIntake = getValue('last-intake');
+    patientInfo.signsSymptoms = getValue('signs-symptoms');
+    patientInfo.pupilsReactive = getValue('pupils-reactive', false);
+
     // Save current patient data
     if (currentPatientId) {
         patients[currentPatientId] = {
             info: {...patientInfo},
-            vitals: [],
-            gcs: [],
-            notes: []
+            vitals: patients[currentPatientId] ? patients[currentPatientId].vitals : [],
+            gcs: patients[currentPatientId] ? patients[currentPatientId].gcs : [],
+            notes: patients[currentPatientId] ? patients[currentPatientId].notes : []
         };
         
         saveToLocalStorage();
@@ -292,7 +299,7 @@ export function patientNameChanged() {
  * Handle patient priority changes
  */
 export function patientPriorityChanged() {
-    const newPriority = document.getElementById('patient-priority').value;
+    const newPriority = getValue('patient-priority');
     
     // Update patientInfo object
     patientInfo.priority = newPriority;
@@ -301,9 +308,9 @@ export function patientPriorityChanged() {
     if (currentPatientId) {
         patients[currentPatientId] = {
             info: {...patientInfo},
-            vitals: [],
-            gcs: [],
-            notes: []
+            vitals: patients[currentPatientId] ? patients[currentPatientId].vitals : [],
+            gcs: patients[currentPatientId] ? patients[currentPatientId].gcs : [],
+            notes: patients[currentPatientId] ? patients[currentPatientId].notes : []
         };
         
         saveToLocalStorage();
@@ -317,10 +324,11 @@ export function patientPriorityChanged() {
 export function updateAllTabPatientDisplays() {
     const patientName = patientInfo.name && patientInfo.name.trim() !== '' ? patientInfo.name : 'New Patient';
     
-    // Update all tab patient displays
-    document.getElementById('patient-info-current').textContent = patientName;
-    document.getElementById('vitals-current').textContent = patientName;
-    document.getElementById('gcs-current').textContent = patientName;
-    document.getElementById('cpr-current').textContent = patientName;
-    document.getElementById('notes-current').textContent = patientName;
+    // Update all tab patient displays (defensive)
+    const ids = ['patient-info-current','vitals-current','gcs-current','cpr-current','notes-current'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = patientName;
+    });
 }
